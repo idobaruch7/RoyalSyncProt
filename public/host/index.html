@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RoyalTest Prototype Host</title>
+    <style>
+        :root {
+            --bg: #0b1020;
+            --panel: #111831;
+            --line: #22325f;
+            --text: #e8ecff;
+            --muted: #9aa6cf;
+            --accent: #60a5fa;
+            --good: #34d399;
+            --warn: #f59e0b;
+            --radius: 10px;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            background: linear-gradient(180deg, #0f1730 0%, var(--bg) 70%);
+            color: var(--text);
+            font-family: Arial, sans-serif;
+            min-height: 100vh;
+            padding: 18px;
+        }
+
+        .grid {
+            display: grid;
+            gap: 14px;
+            grid-template-columns: 380px 1fr;
+        }
+
+        .card {
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            padding: 14px;
+        }
+
+        h1, h2 {
+            margin: 0;
+            font-weight: 700;
+        }
+
+        h1 { font-size: 1.35rem; }
+        h2 { font-size: 1rem; margin-bottom: 10px; }
+
+        .muted { color: var(--muted); }
+
+        .join-url {
+            margin-top: 10px;
+            font-weight: 700;
+            color: var(--accent);
+            word-break: break-all;
+        }
+
+        .controls {
+            margin-top: 12px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        button {
+            border: none;
+            border-radius: 8px;
+            padding: 10px 12px;
+            font-weight: 700;
+            cursor: pointer;
+            background: var(--accent);
+            color: #0b1020;
+        }
+
+        button[disabled] {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
+
+        .secondary {
+            background: #475569;
+            color: #f8fafc;
+        }
+
+        .row {
+            display: flex;
+            justify-content: space-between;
+            border-top: 1px solid var(--line);
+            padding: 8px 0;
+            font-size: 0.94rem;
+        }
+
+        .row:first-child { border-top: none; padding-top: 0; }
+
+        .pill {
+            display: inline-block;
+            border-radius: 999px;
+            padding: 2px 8px;
+            font-size: 0.78rem;
+            font-weight: 700;
+            background: #243665;
+            color: #bfdbfe;
+        }
+
+        .players-list .row span:last-child {
+            color: var(--good);
+            font-weight: 700;
+        }
+
+        .btn-remove {
+            margin-left: 8px;
+            padding: 2px 8px;
+            font-size: 0.78rem;
+            background: #7f1d1d;
+            color: #fee2e2;
+            border-radius: 6px;
+        }
+
+        .btn-remove[disabled] { display: none; }
+
+        .queue-list .row span:last-child {
+            color: var(--warn);
+            font-weight: 700;
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .metric {
+            background: #0f1730;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: 10px;
+        }
+
+        .metric-label {
+            color: var(--muted);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .metric-val {
+            margin-top: 6px;
+            font-size: 1.2rem;
+            font-weight: 700;
+        }
+
+        .metric-val.turn-active {
+            color: #86efac;
+            text-shadow: 0 0 10px rgba(134, 239, 172, 0.45);
+        }
+
+        .community {
+            margin-bottom: 10px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: #0f1730;
+            padding: 10px;
+        }
+
+        .cards-title {
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: var(--muted);
+            margin-bottom: 8px;
+        }
+
+        .cards-strip {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            min-height: 69px;
+            align-items: center;
+        }
+
+        .mini-card {
+            width: 51px;
+            height: 69px;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+            background: #f8fafc;
+            color: #0f172a;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 5px;
+            font-weight: 700;
+            box-shadow: 0 2px 8px rgba(2, 6, 23, 0.35);
+        }
+
+        .mini-card.red { color: #b91c1c; }
+        .mini-card .rank { font-size: 2.04rem; line-height: 1; }
+        .mini-card .suit { font-size: 2.3rem; line-height: 1; align-self: center; transform: translateY(-5px); }
+
+        .cards-empty { color: var(--muted); }
+
+        .row.current-turn {
+            background: rgba(52, 211, 153, 0.12);
+            border-radius: 8px;
+            padding: 8px;
+            border: 1px solid rgba(52, 211, 153, 0.45);
+            margin-top: 6px;
+        }
+
+        .player-main {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .player-hand {
+            display: flex;
+            gap: 6px;
+        }
+
+        .table-list .row {
+            align-items: flex-start;
+            gap: 8px;
+        }
+
+        .player-right {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 6px;
+            font-weight: 700;
+        }
+
+        .bet-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 10px;
+            border-radius: 999px;
+            background: linear-gradient(180deg, #fbbf24 0%, #d97706 100%);
+            color: #1f1300;
+            font-size: 0.95rem;
+            box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.18), 0 2px 6px rgba(0, 0, 0, 0.35);
+        }
+
+        .bet-pill::before {
+            content: '●';
+            font-size: 0.7rem;
+            color: #7c2d12;
+        }
+
+        .bet-pill.zero {
+            background: transparent;
+            color: var(--muted);
+            box-shadow: none;
+            font-weight: 500;
+            font-size: 0.78rem;
+        }
+
+        .bet-pill.zero::before { display: none; }
+
+        .chips-val { color: var(--good); }
+
+        #toasts {
+            position: fixed;
+            right: 16px;
+            bottom: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            z-index: 1000;
+            pointer-events: none;
+        }
+
+        .toast {
+            min-width: 180px;
+            max-width: 320px;
+            padding: 10px 14px;
+            border-radius: 10px;
+            background: #172033;
+            border: 1px solid var(--line);
+            color: var(--text);
+            font-weight: 700;
+            font-size: 0.95rem;
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+            opacity: 0;
+            transform: translateY(6px);
+            transition: opacity 220ms ease, transform 220ms ease;
+        }
+
+        .toast.show { opacity: 1; transform: translateY(0); }
+        .toast.fold { border-color: #7f1d1d; color: #fecaca; }
+        .toast.raise, .toast.allin {
+            border-color: #d97706;
+            color: #fcd34d;
+            background: #2a1d05;
+        }
+        .toast.call, .toast.check { border-color: #1e40af; color: #bfdbfe; }
+
+        @media (max-width: 980px) {
+            .grid { grid-template-columns: 1fr; }
+            .status-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+    </style>
+</head>
+<body>
+    <div class="grid">
+        <section class="card">
+            <h1>Host Console</h1>
+            <div class="muted">Prototype table monitor</div>
+            <div class="join-url" id="join-url">Join URL loading...</div>
+            <div class="controls">
+                <button id="btn-start" disabled>Start Game</button>
+                <button id="btn-next" class="secondary">Next Hand</button>
+                <select id="bot-personality" class="secondary" aria-label="Bot personality">
+                    <option value="calculator">Calculator</option>
+                    <option value="rock">Rock</option>
+                    <option value="maniac">Maniac</option>
+                </select>
+                <button id="btn-add-bot" class="secondary">Add Bot</button>
+                <button id="btn-restart" class="secondary" disabled>Restart Game</button>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2>Game Status</h2>
+            <div class="status-grid">
+                <div class="metric"><div class="metric-label">Phase</div><div class="metric-val" id="m-phase">Waiting</div></div>
+                <div class="metric"><div class="metric-label">Pot</div><div class="metric-val" id="m-pot">0</div></div>
+                <div class="metric"><div class="metric-label">Current Bet</div><div class="metric-val" id="m-bet">0</div></div>
+                <div class="metric"><div class="metric-label">Turn</div><div class="metric-val" id="m-turn">-</div></div>
+            </div>
+            <div class="community">
+                <div class="cards-title">Community Cards</div>
+                <div class="cards-strip" id="community"><span class="cards-empty">No community cards yet</span></div>
+            </div>
+            <div class="table-list" id="table-list"></div>
+        </section>
+
+        <section class="card">
+            <h2>Lobby Players <span class="pill" id="lobby-count">0</span></h2>
+            <div class="players-list" id="lobby-list"></div>
+        </section>
+
+        <section class="card">
+            <h2>Queue <span class="pill" id="queue-count">0</span></h2>
+            <div class="queue-list" id="queue-list"></div>
+        </section>
+    </div>
+
+    <div id="toasts"></div>
+
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script>
+        const socket = io();
+
+        const joinUrlEl = document.getElementById('join-url');
+        const btnStart = document.getElementById('btn-start');
+        const btnNext = document.getElementById('btn-next');
+        const botPersonality = document.getElementById('bot-personality');
+        const btnAddBot = document.getElementById('btn-add-bot');
+        const btnRestart = document.getElementById('btn-restart');
+        const lobbyListEl = document.getElementById('lobby-list');
+        const queueListEl = document.getElementById('queue-list');
+        const lobbyCount = document.getElementById('lobby-count');
+        const queueCount = document.getElementById('queue-count');
+        const mPhase = document.getElementById('m-phase');
+        const mPot = document.getElementById('m-pot');
+        const mBet = document.getElementById('m-bet');
+        const mTurn = document.getElementById('m-turn');
+        const communityEl = document.getElementById('community');
+        const tableListEl = document.getElementById('table-list');
+
+        function esc(value) {
+            const div = document.createElement('div');
+            div.textContent = String(value);
+            return div.innerHTML;
+        }
+
+        function fmt(n) {
+            return Number(n || 0).toLocaleString();
+        }
+
+        function cardMarkup(card) {
+            if (!card) return '';
+            const isRed = card.suit === '♥' || card.suit === '♦';
+            return `<div class="mini-card${isRed ? ' red' : ''}"><span class="rank">${esc(card.rank)}</span><span class="suit">${esc(card.suit)}</span></div>`;
+        }
+
+        function renderCards(el, cards, emptyText) {
+            if (!cards.length) {
+                el.innerHTML = `<span class="cards-empty">${esc(emptyText)}</span>`;
+                return;
+            }
+            el.innerHTML = cards.map((card) => cardMarkup(card)).join('');
+        }
+
+        let gameStarted = false;
+        let lastLobby = [];
+
+        function eligibleToStart(players) {
+            return (players || []).filter((p) => p.is_bot || p.is_connected !== false).length;
+        }
+
+        function updateButtons(players) {
+            if (players) lastLobby = players;
+            const lobbyCountValue = lastLobby.length;
+            const eligibleCount = eligibleToStart(lastLobby);
+            btnStart.disabled = gameStarted || eligibleCount < 2;
+            btnAddBot.disabled = gameStarted || lobbyCountValue >= 8;
+            btnRestart.disabled = !gameStarted;
+        }
+
+        socket.on('connect', () => {
+            joinUrlEl.textContent = `${location.protocol}//${location.hostname}:${location.port}/join`;
+            socket.emit('host_connected');
+        });
+
+        socket.on('lobby_update', (players) => {
+            lobbyCount.textContent = String(players.length);
+            updateButtons(players);
+
+            if (!players.length) {
+                lobbyListEl.innerHTML = '<div class="muted">No players in lobby</div>';
+                return;
+            }
+
+            lobbyListEl.innerHTML = players.map((p) => {
+                const botTag = p.is_bot ? ` <span class="pill">BOT ${esc(p.personality || '')}</span>` : '';
+                const removeBtn = p.is_bot && !gameStarted
+                    ? ` <button class="btn-remove" data-remove-bot="${esc(p.nickname)}">Remove</button>`
+                    : '';
+                const right = p.is_bot ? fmt(p.chips) : (p.is_connected === false ? 'offline' : fmt(p.chips));
+                return `<div class="row"><span>${esc(p.nickname)}${botTag}${removeBtn}</span><span>${right}</span></div>`;
+            }).join('');
+        });
+
+        socket.on('queue_update', (players) => {
+            queueCount.textContent = String(players.length);
+
+            if (!players.length) {
+                queueListEl.innerHTML = '<div class="muted">Queue is empty</div>';
+                return;
+            }
+
+            queueListEl.innerHTML = players.map((p) => (
+                `<div class="row"><span>${esc(p.nickname)}</span><span>${p.is_connected === false ? 'offline' : fmt(p.chips)}</span></div>`
+            )).join('');
+        });
+
+        socket.on('game_starting', () => {
+            gameStarted = true;
+            mPhase.textContent = 'pre_flop';
+            updateButtons();
+        });
+
+        socket.on('game_state', (state) => {
+            mPhase.textContent = state.state || '-';
+            mPot.textContent = fmt(state.pot);
+            mBet.textContent = fmt(state.current_bet);
+            mTurn.textContent = state.current_player || '-';
+            mTurn.classList.toggle('turn-active', !!state.current_player);
+
+            renderCards(communityEl, state.community_cards || [], 'No community cards yet');
+
+            const players = state.players || [];
+            tableListEl.innerHTML = players.map((p) => {
+                const tags = [];
+                if (p.is_dealer) tags.push('D');
+                if (p.is_sb) tags.push('SB');
+                if (p.is_bb) tags.push('BB');
+                if (p.is_current) tags.push('TURN');
+                if (p.folded) tags.push('FOLD');
+                if (p.all_in) tags.push('ALL-IN');
+                if (p.is_connected === false) tags.push('OFFLINE');
+                const handHtml = (p.hand && p.hand.length)
+                    ? `<div class="player-hand">${p.hand.map((card) => cardMarkup(card)).join('')}</div>`
+                    : '';
+                const betPill = p.round_bet > 0
+                    ? `<span class="bet-pill">${fmt(p.round_bet)}</span>`
+                    : `<span class="bet-pill zero">no bet</span>`;
+                return `<div class="row${p.is_current ? ' current-turn' : ''}"><div class="player-main">${esc(p.nickname)} (${tags.join(' ') || '-'})${handHtml}</div><div class="player-right"><span class="chips-val">${fmt(p.chips)} chips</span>${betPill}</div></div>`;
+            }).join('');
+        });
+
+        socket.on('hand_over', (data) => {
+            const winners = (data.winners || []).join(', ') || 'none';
+            mTurn.textContent = `winners: ${winners}`;
+            mTurn.classList.remove('turn-active');
+        });
+
+        socket.on('game_finished', (data) => {
+            gameStarted = false;
+            mPhase.textContent = 'finished';
+            mTurn.textContent = data.winner ? `winner: ${data.winner}` : 'no winner';
+            mTurn.classList.remove('turn-active');
+            updateButtons();
+        });
+
+        const toastsEl = document.getElementById('toasts');
+        const MAX_TOASTS = 5;
+
+        function actionPhrase(ev) {
+            const actor = ev.actor || 'Someone';
+            const amount = fmt(ev.amount || 0);
+            switch ((ev.action || '').toLowerCase()) {
+                case 'fold': return `${actor} folded`;
+                case 'check': return `${actor} checked`;
+                case 'call': return ev.all_in ? `${actor} called all in (${amount})` : `${actor} called ${amount}`;
+                case 'raise': return ev.all_in ? `${actor} went all in for ${amount}` : `${actor} raised to ${amount}`;
+                default: return `${actor} acted`;
+            }
+        }
+
+        function showToast(ev) {
+            const cls = ev.all_in ? 'allin' : (ev.action || '').toLowerCase();
+            const div = document.createElement('div');
+            div.className = `toast ${cls}`;
+            div.textContent = actionPhrase(ev);
+            toastsEl.appendChild(div);
+            requestAnimationFrame(() => div.classList.add('show'));
+            while (toastsEl.children.length > MAX_TOASTS) {
+                toastsEl.removeChild(toastsEl.firstChild);
+            }
+            setTimeout(() => {
+                div.classList.remove('show');
+                setTimeout(() => div.remove(), 260);
+            }, 3000);
+        }
+
+        socket.on('action_event', showToast);
+
+        socket.on('add_bot_error', (data) => {
+            alert((data && data.message) || 'Failed to add bot.');
+        });
+
+        btnStart.addEventListener('click', () => socket.emit('start_game'));
+        btnNext.addEventListener('click', () => socket.emit('next_hand'));
+        btnAddBot.addEventListener('click', () => {
+            socket.emit('add_bot', { personality: botPersonality.value });
+        });
+        lobbyListEl.addEventListener('click', (event) => {
+            const btn = event.target.closest('[data-remove-bot]');
+            if (!btn) return;
+            socket.emit('remove_bot', { nickname: btn.getAttribute('data-remove-bot') });
+        });
+        btnRestart.addEventListener('click', () => {
+            if (!confirm('Restart the game? The current hand will end and all chips will reset to 1000.')) return;
+            socket.emit('restart_game');
+        });
+    </script>
+</body>
+</html>

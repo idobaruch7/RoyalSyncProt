@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RoyalTest Prototype Player</title>
+    <style>
+        :root {
+            --bg: #111827;
+            --panel: #1f2937;
+            --line: #374151;
+            --text: #f9fafb;
+            --muted: #9ca3af;
+            --accent: #34d399;
+            --warn: #f59e0b;
+            --danger: #f87171;
+            --radius: 10px;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: Arial, sans-serif;
+            color: var(--text);
+            background: radial-gradient(circle at top, #1f2937 0%, var(--bg) 55%);
+            padding: 14px;
+        }
+
+        .screen { display: none; }
+        .screen.active { display: block; }
+
+        .card {
+            max-width: 680px;
+            margin: 0 auto;
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 14px;
+        }
+
+        h1, h2, h3 { margin: 0; }
+        h1 { font-size: 1.35rem; }
+        h2 { font-size: 1.15rem; }
+
+        .muted { color: var(--muted); }
+        .error { color: var(--danger); min-height: 1.2em; }
+
+        input {
+            width: 100%;
+            margin-top: 10px;
+            padding: 11px;
+            border-radius: 8px;
+            border: 1px solid var(--line);
+            background: #0f172a;
+            color: var(--text);
+            font-size: 1rem;
+        }
+
+        button {
+            border: none;
+            border-radius: 8px;
+            padding: 10px 12px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .primary { background: var(--accent); color: #022c22; }
+        .secondary { background: #475569; color: #f8fafc; }
+        .danger { background: #7f1d1d; color: #fecaca; }
+        .warn { background: #78350f; color: #fde68a; }
+
+        .join-btn { margin-top: 10px; width: 100%; }
+
+        .status {
+            margin-top: 10px;
+            border-radius: 8px;
+            border: 1px solid var(--line);
+            background: #0f172a;
+            padding: 10px;
+            min-height: 42px;
+        }
+
+        .turn-indicator {
+            margin-top: 10px;
+            border-radius: 8px;
+            border: 1px solid #334155;
+            background: #172033;
+            color: #cbd5e1;
+            font-weight: 700;
+            text-align: center;
+            padding: 10px;
+        }
+
+        .turn-indicator.active {
+            border-color: #34d399;
+            background: #0d2c22;
+            color: #6ee7b7;
+            box-shadow: 0 0 0 2px rgba(52, 211, 153, 0.25);
+            animation: pulse-turn 1.1s ease-in-out infinite;
+        }
+
+        @keyframes pulse-turn {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.01); }
+        }
+
+        .stats {
+            margin-top: 10px;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+        }
+
+        .stat {
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: 10px;
+            background: #0f172a;
+            text-align: center;
+        }
+
+        .stat .label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            color: var(--muted);
+        }
+
+        .stat .val {
+            margin-top: 6px;
+            font-size: 1.05rem;
+            font-weight: 700;
+        }
+
+        .cards {
+            margin-top: 10px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: #0f172a;
+            padding: 10px;
+            min-height: 64px;
+        }
+
+        .cards-title {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            color: var(--muted);
+            margin-bottom: 8px;
+            letter-spacing: 0.02em;
+        }
+
+        .cards-strip {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            min-height: 44px;
+            align-items: center;
+        }
+
+        .mini-card {
+            width: 51px;
+            height: 69px;
+            border-radius: 6px;
+            border: 1px solid #e2e8f0;
+            background: #f8fafc;
+            color: #0f172a;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 4px;
+            font-weight: 700;
+            box-shadow: 0 2px 8px rgba(2, 6, 23, 0.35);
+        }
+
+        .mini-card.red {
+            color: #b91c1c;
+        }
+
+        .mini-card .rank {
+            font-size: 2.04rem;
+            line-height: 1;
+        }
+
+        .mini-card .suit {
+            font-size: 2.3rem;
+            line-height: 1;
+            align-self: center;
+            transform: translateY(-5px);
+        }
+
+        .cards-empty {
+            color: var(--muted);
+            font-size: 0.95rem;
+        }
+
+        .actions {
+            margin-top: 12px;
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 8px;
+        }
+
+        .raise-row {
+            margin-top: 8px;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .raise-row input[type="range"] { margin: 0; }
+
+        .lobby-list {
+            margin-top: 10px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: #0f172a;
+            padding: 10px;
+        }
+
+        .row {
+            display: flex;
+            justify-content: space-between;
+            padding: 6px 0;
+            border-top: 1px solid #1e293b;
+        }
+
+        .row:first-child { border-top: none; }
+
+        .table-section {
+            margin-top: 10px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: #0f172a;
+            padding: 10px;
+        }
+
+        .table-section .cards-title { margin-bottom: 8px; }
+
+        .seat {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px;
+            border-top: 1px solid #1e293b;
+            gap: 8px;
+        }
+
+        .seat:first-child { border-top: none; }
+
+        .seat.current {
+            background: rgba(52, 211, 153, 0.12);
+            border-radius: 8px;
+            border: 1px solid rgba(52, 211, 153, 0.45);
+            padding: 7px;
+        }
+
+        .seat .name { font-weight: 700; }
+        .seat .tags {
+            font-size: 0.72rem;
+            color: var(--muted);
+            margin-left: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .seat.folded .name { color: var(--muted); text-decoration: line-through; }
+
+        .seat-right {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 4px;
+        }
+
+        .chips-val { color: var(--accent); font-weight: 700; font-size: 0.92rem; }
+
+        .bet-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 9px;
+            border-radius: 999px;
+            background: linear-gradient(180deg, #fbbf24 0%, #d97706 100%);
+            color: #1f1300;
+            font-size: 0.88rem;
+            font-weight: 700;
+            box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.18);
+        }
+        .bet-pill::before {
+            content: '●';
+            font-size: 0.65rem;
+            color: #7c2d12;
+        }
+        .bet-pill.zero {
+            background: transparent;
+            color: var(--muted);
+            box-shadow: none;
+            font-weight: 500;
+            font-size: 0.72rem;
+        }
+        .bet-pill.zero::before { display: none; }
+
+        #toasts {
+            position: fixed;
+            right: 12px;
+            top: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            z-index: 1000;
+            pointer-events: none;
+        }
+
+        .toast {
+            min-width: 160px;
+            max-width: 280px;
+            padding: 8px 12px;
+            border-radius: 8px;
+            background: #172033;
+            border: 1px solid var(--line);
+            color: var(--text);
+            font-weight: 700;
+            font-size: 0.9rem;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+            opacity: 0;
+            transform: translateY(-6px);
+            transition: opacity 220ms ease, transform 220ms ease;
+        }
+        .toast.show { opacity: 1; transform: translateY(0); }
+        .toast.fold { border-color: #7f1d1d; color: #fecaca; }
+        .toast.raise, .toast.allin {
+            border-color: #d97706;
+            color: #fcd34d;
+            background: #2a1d05;
+        }
+        .toast.call, .toast.check { border-color: #1e40af; color: #bfdbfe; }
+
+        @media (max-width: 640px) {
+            .stats { grid-template-columns: 1fr; }
+            .actions { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <section id="join-screen" class="screen active card">
+        <h1>Join Prototype Table</h1>
+        <div class="muted">Nickname is not saved in this prototype.</div>
+        <input id="input-nickname" maxlength="20" placeholder="Enter nickname">
+        <button id="btn-join" class="primary join-btn">Join</button>
+        <div id="join-error" class="error"></div>
+    </section>
+
+    <section id="queue-screen" class="screen card">
+        <h2>Queued</h2>
+        <div class="muted">Game in progress. You will join next hand.</div>
+        <div id="queue-name" class="status"></div>
+    </section>
+
+    <section id="lobby-screen" class="screen card">
+        <h2>Lobby</h2>
+        <div id="my-badge" class="status"></div>
+        <div class="lobby-list" id="lobby-list"></div>
+    </section>
+
+    <section id="game-screen" class="screen card">
+        <h2>Game</h2>
+        <div id="status" class="status">Waiting for game...</div>
+        <div id="turn-indicator" class="turn-indicator">Waiting for next action...</div>
+
+        <div class="stats">
+            <div class="stat"><div class="label">Pot</div><div class="val" id="pot">0</div></div>
+            <div class="stat"><div class="label">Current Bet</div><div class="val" id="bet">0</div></div>
+            <div class="stat"><div class="label">My Chips</div><div class="val" id="chips">0</div></div>
+        </div>
+
+        <div class="cards">
+            <div class="cards-title">Community</div>
+            <div class="cards-strip" id="community"><span class="cards-empty">No cards yet</span></div>
+        </div>
+        <div class="cards">
+            <div class="cards-title">My hand</div>
+            <div class="cards-strip" id="hand"><span class="cards-empty">Waiting for deal...</span></div>
+        </div>
+
+        <div class="table-section">
+            <div class="cards-title">Table</div>
+            <div id="seats"></div>
+        </div>
+
+        <div class="raise-row">
+            <input id="raise-slider" type="range" min="0" max="0" value="0" step="10">
+            <div id="raise-val">0</div>
+        </div>
+
+        <div class="actions">
+            <button id="btn-fold" class="danger">Fold</button>
+            <button id="btn-call" class="secondary">Check/Call</button>
+            <button id="btn-raise" class="warn">Raise</button>
+        </div>
+    </section>
+
+    <div id="toasts"></div>
+
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script>
+        const socket = io();
+
+        const screens = {
+            join: document.getElementById('join-screen'),
+            queue: document.getElementById('queue-screen'),
+            lobby: document.getElementById('lobby-screen'),
+            game: document.getElementById('game-screen'),
+        };
+
+        const inputNickname = document.getElementById('input-nickname');
+        const btnJoin = document.getElementById('btn-join');
+        const joinError = document.getElementById('join-error');
+        const queueName = document.getElementById('queue-name');
+        const myBadge = document.getElementById('my-badge');
+        const lobbyList = document.getElementById('lobby-list');
+        const statusEl = document.getElementById('status');
+        const turnIndicatorEl = document.getElementById('turn-indicator');
+        const potEl = document.getElementById('pot');
+        const betEl = document.getElementById('bet');
+        const chipsEl = document.getElementById('chips');
+        const communityEl = document.getElementById('community');
+        const handEl = document.getElementById('hand');
+        const raiseSlider = document.getElementById('raise-slider');
+        const raiseVal = document.getElementById('raise-val');
+        const btnFold = document.getElementById('btn-fold');
+        const btnCall = document.getElementById('btn-call');
+        const btnRaise = document.getElementById('btn-raise');
+        const seatsEl = document.getElementById('seats');
+        const toastsEl = document.getElementById('toasts');
+        const MAX_TOASTS = 5;
+
+        const PLAYER_SESSION_KEY = 'royaltest.prototype.playerSessionId';
+
+        let myNickname = '';
+        let myChips = 1000;
+        let callAmount = 0;
+        let turnState = null;
+        let reconnectProbeSent = false;
+        const playerSessionId = getOrCreatePlayerSessionId();
+
+        function esc(value) {
+            const div = document.createElement('div');
+            div.textContent = String(value);
+            return div.innerHTML;
+        }
+
+        function fmt(n) {
+            return Number(n || 0).toLocaleString();
+        }
+
+        function showScreen(name) {
+            Object.values(screens).forEach((el) => el.classList.remove('active'));
+            screens[name].classList.add('active');
+        }
+
+        function getOrCreatePlayerSessionId() {
+            try {
+                let sessionId = localStorage.getItem(PLAYER_SESSION_KEY);
+                if (!sessionId) {
+                    sessionId = `proto-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+                    localStorage.setItem(PLAYER_SESSION_KEY, sessionId);
+                }
+                return sessionId;
+            } catch (_) {
+                return `proto-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+            }
+        }
+
+        function applyIdentity(name, chips) {
+            myNickname = name;
+            myChips = chips;
+            myBadge.innerHTML = `<strong>${esc(name)}</strong> · ${fmt(chips)} chips`;
+            chipsEl.textContent = fmt(chips);
+        }
+
+        function tryJoin() {
+            const nickname = inputNickname.value.trim();
+            if (!nickname) {
+                joinError.textContent = 'Please enter a nickname.';
+                return;
+            }
+            joinError.textContent = '';
+            socket.emit('join_game', { nickname, session_id: playerSessionId });
+        }
+
+        function tryReconnectProbe() {
+            if (reconnectProbeSent) return;
+            reconnectProbeSent = true;
+            socket.emit('join_game', { session_id: playerSessionId });
+        }
+
+        function updateRaiseUi(state) {
+            const minRaiseTotal = state.min_raise_total || 0;
+            const maxTotal = state.max_total || 0;
+            const canRaise = !!state.can_raise || !!state.can_short_all_in;
+
+            raiseSlider.min = String(Math.min(minRaiseTotal, maxTotal));
+            raiseSlider.max = String(maxTotal);
+            raiseSlider.step = '10';
+            raiseSlider.value = String(Math.min(minRaiseTotal, maxTotal));
+            raiseSlider.disabled = !canRaise;
+            btnRaise.disabled = !canRaise;
+            raiseVal.textContent = fmt(raiseSlider.value);
+        }
+
+        function setTurnIndicator(isMyTurn, currentPlayer) {
+            if (isMyTurn) {
+                turnIndicatorEl.textContent = 'YOUR TURN - Choose an action';
+                turnIndicatorEl.classList.add('active');
+                return;
+            }
+            turnIndicatorEl.classList.remove('active');
+            if (currentPlayer) {
+                turnIndicatorEl.textContent = `Waiting for ${currentPlayer}...`;
+            } else {
+                turnIndicatorEl.textContent = 'Waiting for next action...';
+            }
+        }
+
+        function cardMarkup(card) {
+            if (!card) return '';
+            const isRed = card.suit === '♥' || card.suit === '♦';
+            return `<div class="mini-card${isRed ? ' red' : ''}"><span class="rank">${esc(card.rank)}</span><span class="suit">${esc(card.suit)}</span></div>`;
+        }
+
+        function renderCards(el, cards, emptyText) {
+            if (!cards.length) {
+                el.innerHTML = `<span class="cards-empty">${esc(emptyText)}</span>`;
+                return;
+            }
+            el.innerHTML = cards.map((card) => cardMarkup(card)).join('');
+        }
+
+        function submitAction(action, amount) {
+            socket.emit('player_action', { action, amount });
+            statusEl.textContent = 'Action sent...';
+        }
+
+        btnJoin.addEventListener('click', tryJoin);
+        inputNickname.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') tryJoin();
+        });
+
+        raiseSlider.addEventListener('input', () => {
+            raiseVal.textContent = fmt(raiseSlider.value);
+        });
+
+        btnFold.addEventListener('click', () => submitAction('fold', 0));
+        btnCall.addEventListener('click', () => submitAction(callAmount > 0 ? 'call' : 'check', callAmount));
+        btnRaise.addEventListener('click', () => submitAction('raise', Number(raiseSlider.value)));
+
+        socket.on('connect', () => {
+            if (!myNickname) {
+                tryReconnectProbe();
+            }
+        });
+
+        socket.on('join_error', (data) => {
+            const message = (data && data.message) || 'Join failed.';
+            if (reconnectProbeSent && !myNickname && message === 'Nickname cannot be empty.') {
+                return;
+            }
+            joinError.textContent = message;
+            showScreen('join');
+        });
+
+        socket.on('join_success', (data) => {
+            applyIdentity(data.nickname, data.chips);
+            showScreen('lobby');
+            if (data.reconnected) {
+                statusEl.textContent = 'Reconnected.';
+            }
+        });
+
+        socket.on('join_queued', (data) => {
+            applyIdentity(data.nickname, data.chips);
+            queueName.textContent = `${data.nickname} · ${fmt(data.chips)} chips`;
+            showScreen('queue');
+        });
+
+        socket.on('lobby_update', (players) => {
+            if (!players.length) {
+                lobbyList.innerHTML = '<div class="muted">Waiting for players...</div>';
+                return;
+            }
+
+            lobbyList.innerHTML = players.map((p) => (
+                `<div class="row"><span>${esc(p.nickname)}${p.nickname === myNickname ? ' (you)' : ''}</span><span>${p.is_connected === false ? 'offline' : fmt(p.chips)}</span></div>`
+            )).join('');
+        });
+
+        socket.on('game_starting', () => {
+            showScreen('game');
+            statusEl.textContent = 'Game starting...';
+        });
+
+        socket.on('your_hand', (data) => {
+            renderCards(handEl, data.hand || [], 'Waiting for deal...');
+        });
+
+        socket.on('your_turn', (state) => {
+            turnState = state;
+            callAmount = state.call_amount || 0;
+            updateRaiseUi(state);
+            btnCall.textContent = state.can_check ? 'Check' : `Call ${fmt(callAmount)}`;
+            statusEl.textContent = 'Your turn.';
+            setTurnIndicator(true);
+        });
+
+        socket.on('action_error', (data) => {
+            statusEl.textContent = (data && data.message) || 'Illegal action.';
+        });
+
+        function renderSeats(players) {
+            if (!players || !players.length) {
+                seatsEl.innerHTML = '<div class="muted">No players seated.</div>';
+                return;
+            }
+            seatsEl.innerHTML = players.map((p) => {
+                const tags = [];
+                if (p.is_dealer) tags.push('D');
+                if (p.is_sb) tags.push('SB');
+                if (p.is_bb) tags.push('BB');
+                if (p.folded) tags.push('FOLD');
+                if (p.all_in) tags.push('ALL-IN');
+                if (p.is_connected === false) tags.push('OFFLINE');
+                if (p.is_bot) tags.push('BOT');
+                const cls = ['seat'];
+                if (p.is_current) cls.push('current');
+                if (p.folded) cls.push('folded');
+                const youSuffix = p.nickname === myNickname ? ' <span class="muted">(you)</span>' : '';
+                const tagHtml = tags.length ? `<span class="tags">${tags.join(' ')}</span>` : '';
+                const betPill = p.round_bet > 0
+                    ? `<span class="bet-pill">${fmt(p.round_bet)}</span>`
+                    : '<span class="bet-pill zero">no bet</span>';
+                return `<div class="${cls.join(' ')}"><div><span class="name">${esc(p.nickname)}</span>${youSuffix}${tagHtml}</div><div class="seat-right"><span class="chips-val">${fmt(p.chips)} chips</span>${betPill}</div></div>`;
+            }).join('');
+        }
+
+        function actionPhrase(ev) {
+            const actor = ev.actor || 'Someone';
+            const amount = fmt(ev.amount || 0);
+            switch ((ev.action || '').toLowerCase()) {
+                case 'fold': return `${actor} folded`;
+                case 'check': return `${actor} checked`;
+                case 'call': return ev.all_in ? `${actor} called all in (${amount})` : `${actor} called ${amount}`;
+                case 'raise': return ev.all_in ? `${actor} went all in for ${amount}` : `${actor} raised to ${amount}`;
+                default: return `${actor} acted`;
+            }
+        }
+
+        function showToast(ev) {
+            const cls = ev.all_in ? 'allin' : (ev.action || '').toLowerCase();
+            const div = document.createElement('div');
+            div.className = `toast ${cls}`;
+            div.textContent = actionPhrase(ev);
+            toastsEl.appendChild(div);
+            requestAnimationFrame(() => div.classList.add('show'));
+            while (toastsEl.children.length > MAX_TOASTS) {
+                toastsEl.removeChild(toastsEl.firstChild);
+            }
+            setTimeout(() => {
+                div.classList.remove('show');
+                setTimeout(() => div.remove(), 260);
+            }, 3000);
+        }
+
+        socket.on('action_event', showToast);
+
+        socket.on('game_state', (state) => {
+            potEl.textContent = fmt(state.pot || 0);
+            betEl.textContent = fmt(state.current_bet || 0);
+
+            renderCards(communityEl, state.community_cards || [], 'No cards yet');
+            renderSeats(state.players || []);
+
+            const me = (state.players || []).find((p) => p.nickname === myNickname);
+            if (me) {
+                myChips = me.chips;
+                chipsEl.textContent = fmt(myChips);
+                if (state.state === 'showdown' && me.hand && me.hand.length) {
+                    renderCards(handEl, me.hand, 'Waiting for deal...');
+                }
+            }
+
+            if (state.state !== 'showdown') {
+                const myTurn = state.current_player === myNickname;
+                setTurnIndicator(myTurn, state.current_player);
+                if (!myTurn && state.current_player) {
+                    statusEl.textContent = `Waiting for ${state.current_player}...`;
+                }
+            } else {
+                setTurnIndicator(false);
+            }
+        });
+
+        socket.on('hand_over', (data) => {
+            const winners = data.winners || [];
+            if (winners.includes(myNickname)) {
+                statusEl.textContent = 'You won the hand!';
+            } else {
+                statusEl.textContent = `${winners.join(', ') || 'Unknown'} won the hand.`;
+            }
+            setTurnIndicator(false);
+        });
+
+        socket.on('game_finished', (data) => {
+            statusEl.textContent = data.winner ? `Game finished. Winner: ${data.winner}` : 'Game finished.';
+            setTurnIndicator(false);
+            showScreen('lobby');
+        });
+    </script>
+</body>
+</html>
