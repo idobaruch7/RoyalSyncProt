@@ -116,3 +116,7 @@ class BotPlayer(Player):
             return min(1.0, high * 0.6 + pair)
         import random
         return random.uniform(0.2, 0.5)
+
+
+
+#### comment
