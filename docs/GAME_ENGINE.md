@@ -1,5 +1,7 @@
 # Game Engine
 
+**Note:** This document describes the Texas Hold'em poker engine (`server/game_engine.py`). Blackjack has its own separate engine (`server/blackjack_engine.py`).
+
 `server/game_engine.py` implements the poker rules. It has no awareness of sockets, sessions, or HTTP — it works on `Player` objects passed in by the caller.
 
 ## Cards & deck

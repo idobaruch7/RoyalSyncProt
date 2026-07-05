@@ -1,5 +1,7 @@
 # Bots
 
+**Note:** Bots are a Texas Hold'em-specific feature. Blackjack does not currently support bot players.
+
 Bots are server-side AI players. When it's a bot's turn, `_process_automatic_turns` hands off to `_schedule_bot_turn(player)`, which spawns a background task via `socketio.start_background_task(_run_bot_turn, player)`. That task sleeps `random.uniform(0.7, 1.5)` seconds (the "thinking" delay), re-validates that the same bot is still on the clock, calls `bot.get_action(game_state)`, applies the action, and re-enters the scheduler for the next actor.
 
 A module-level `_bot_action_pending` flag prevents double-scheduling. On wake-up the task bails cleanly if `current_game` is gone (restart) or if `current_player()` no longer points to the same bot (disconnect / state change during the sleep).
