@@ -14,7 +14,7 @@ Bots have no socket connection. They're created in `on_add_bot` (`app.py`) with 
 client → add_bot {personality: 'calculator' | 'rock' | 'maniac'}
 ```
 
-The server validates the personality (defaults to `calculator` if unknown), generates a unique nickname like `Bot 1 (rock)`, and broadcasts the lobby update. Bots can only be added before the game starts — see `if game_active: return` at the top of `on_add_bot`.
+The server validates the personality (defaults to `calculator` if unknown), generates a unique nickname like `Bot 1 (rock)`, and broadcasts the lobby update. Bots can only be added before the game starts - see `if game_active: return` at the top of `on_add_bot`.
 
 ## The decision contract
 
@@ -39,7 +39,7 @@ if event in ('invalid_action', 'not_your_turn', 'error'):
 
 `_evaluate_hand` returns a float in `[0, 1]`:
 
-- **5+ cards available** (flop or later): use the actual `best_hand_value` from the engine, normalized as `category / 8`. So a pair ≈ 0.125, a flush = 0.625, a straight flush = 1.0. This ignores tiebreaker kickers — it's a coarse measure on purpose.
+- **5+ cards available** (flop or later): use the actual `best_hand_value` from the engine, normalized as `category / 8`. So a pair ≈ 0.125, a flush = 0.625, a straight flush = 1.0. This ignores tiebreaker kickers - it's a coarse measure on purpose.
 - **2 cards (preflop)**: `high_card / 14 * 0.6 + (0.3 if pocket_pair else 0)`. AA ≈ 0.9, 72o ≈ 0.3, 22 ≈ 0.39.
 - **No cards yet**: random in `[0.2, 0.5]` (shouldn't normally happen since hands are always dealt before action).
 
@@ -47,9 +47,9 @@ This is intentionally simple. There is no equity calculation, no opponent modeli
 
 ## Personalities
 
-All three personalities call `_aggressive_action` to translate "I want to bet" into the actual action — that helper picks `raise` if a full raise is legal, `raise` for the all-in amount if only a short all-in is legal, otherwise falls back to `call` or `fold`.
+All three personalities call `_aggressive_action` to translate "I want to bet" into the actual action - that helper picks `raise` if a full raise is legal, `raise` for the all-in amount if only a short all-in is legal, otherwise falls back to `call` or `fold`.
 
-### Rock — tight/passive
+### Rock - tight/passive
 
 ```
 strength > 0.7 → aggressive (target = max(20, min_raise_total))
@@ -57,9 +57,9 @@ strength > 0.4 → call
 otherwise     → fold
 ```
 
-Folds the bottom 40% of hands, calls medium hands, only raises premium hands. The minimum raise it makes is small — close to `min_raise_total`.
+Folds the bottom 40% of hands, calls medium hands, only raises premium hands. The minimum raise it makes is small - close to `min_raise_total`.
 
-### Maniac — loose/aggressive
+### Maniac - loose/aggressive
 
 ```
 strength > 0.3 → aggressive (target = current_bet + 2*min_raise)
@@ -68,7 +68,7 @@ otherwise     → call
 
 Almost never folds. Raises with anything above weak. Target raise size is roughly **double** the minimum raise on top of the current bet, so the maniac builds pots fast.
 
-### Calculator — pot-odds based (default)
+### Calculator - pot-odds based (default)
 
 ```
 pot_odds = call_amount / (pot + call_amount)
@@ -83,7 +83,7 @@ This is the most "thoughtful" of the three but still naive: it treats normalized
 
 - No bluffing, slow-playing, or bet sizing relative to pot.
 - No memory of opponents across hands.
-- The "thinking" delay is fixed-uniform random in `_run_bot_turn`. Bots don't vary their pacing by hand strength, street, or personality. To add that, change the `socketio.sleep(...)` value in `_run_bot_turn` based on `player.personality` or the decision — keep it inside the scheduler, not inside the bot.
+- The "thinking" delay is fixed-uniform random in `_run_bot_turn`. Bots don't vary their pacing by hand strength, street, or personality. To add that, change the `socketio.sleep(...)` value in `_run_bot_turn` based on `player.personality` or the decision - keep it inside the scheduler, not inside the bot.
 - No awareness of position (button vs. early), stack-to-pot ratio, or implied odds.
 
 ## Adding a new personality

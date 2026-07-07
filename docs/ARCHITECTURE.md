@@ -26,8 +26,8 @@ RoyalSyncProt/
 - **One process, multiple games.** Global state in `app.py` holds separate in-memory game instances: one Texas Hold'em table and one Blackjack table. Each maintains its own `session_players`, `current_game`, etc. Restarting the server wipes everything.
 - **Sessions are browser-scoped.** Each player browser generates a `session_id` (kept in `localStorage`) and sends it with `join_game`. The server maps `session_id → player info` and `sid (socket id) → session_id`. This allows reconnect after a refresh.
 - **Two roles (poker-specific):**
-  - **Host** (`/host` or `/blackjack-host`) — manages the game lobby, can add/remove bots (poker), start rounds, advance hands.
-  - **Player** (`/player` or `/blackjack-player`) — picks a nickname, joins the game, plays hands.
+  - **Host** (`/host` or `/blackjack-host`) - manages the game lobby, can add/remove bots (poker), start rounds, advance hands.
+  - **Player** (`/player` or `/blackjack-player`) - picks a nickname, joins the game, plays hands.
 - **Bots** are server-side only (poker-specific). They have a `session_id` (prefixed `bot-`) but no socket; they're always treated as connected.
 
 ## Lifecycle of a hand (Texas Hold'em)
@@ -59,15 +59,15 @@ Client → server:
 - `host_connected` (host requests current snapshot)
 
 Server → client:
-- `lobby_update`, `queue_update` — broadcast snapshots
+- `lobby_update`, `queue_update` - broadcast snapshots
 - `join_success`, `join_queued`, `join_error`
-- `game_starting`, `game_state` — full table snapshot for everyone
-- `your_hand` — private, only to the owning socket
-- `your_turn` — private, includes `legal_actions_for(player)`
-- `action_error` — private, illegal action feedback
-- `action_event {actor, action, amount, all_in}` — broadcast after every applied action (powers client-side toasts)
+- `game_starting`, `game_state` - full table snapshot for everyone
+- `your_hand` - private, only to the owning socket
+- `your_turn` - private, includes `legal_actions_for(player)`
+- `action_error` - private, illegal action feedback
+- `action_event {actor, action, amount, all_in}` - broadcast after every applied action (powers client-side toasts)
 - `hand_over`, `game_finished`
-- `add_bot_error` — private, surfaces add/remove-bot rejection messages
+- `add_bot_error` - private, surfaces add/remove-bot rejection messages
 
 ## Key design choices
 

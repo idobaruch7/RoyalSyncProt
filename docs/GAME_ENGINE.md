@@ -2,12 +2,12 @@
 
 **Note:** This document describes the Texas Hold'em poker engine (`server/game_engine.py`). Blackjack has its own separate engine (`server/blackjack_engine.py`).
 
-`server/game_engine.py` implements the poker rules. It has no awareness of sockets, sessions, or HTTP — it works on `Player` objects passed in by the caller.
+`server/game_engine.py` implements the poker rules. It has no awareness of sockets, sessions, or HTTP - it works on `Player` objects passed in by the caller.
 
 ## Cards & deck
 
-- `Card(rank, suit)` — `rank` is `'2'..'10', 'J', 'Q', 'K', 'A'`; `suit` is one of `♠ ♥ ♦ ♣`. `value` is the integer rank (Ace = 14).
-- `Deck()` — 52 shuffled cards. `deal(n)` pops `n` cards off the front.
+- `Card(rank, suit)` - `rank` is `'2'..'10', 'J', 'Q', 'K', 'A'`; `suit` is one of `♠ ♥ ♦ ♣`. `value` is the integer rank (Ace = 14).
+- `Deck()` - 52 shuffled cards. `deal(n)` pops `n` cards off the front.
 
 ## Hand evaluation
 
@@ -41,7 +41,7 @@ Transitions live in `_advance_street`. After each street, `round_bet`, `current_
 
 - **Fold/check/call** → `_remove_current_actor` pops from the queue.
 - **Full raise** → `_reopen_action_from(idx)` rebuilds the queue: every other live player must respond again, and `raise_reopened_for` is reset to that set.
-- **Short all-in** (raise smaller than `min_raise`) → does *not* reopen action for players who already acted — see `can_short_all_in` and the `raise_reopened_for` set.
+- **Short all-in** (raise smaller than `min_raise`) → does *not* reopen action for players who already acted - see `can_short_all_in` and the `raise_reopened_for` set.
 
 When `to_act` empties, `_advance_street` is called. If only one live player remains at any point, `_award_pots` runs immediately (`game_over`).
 
@@ -49,24 +49,24 @@ When `to_act` empties, `_advance_street` is called. If only one live player rema
 
 `legal_actions_for(player)` returns the dict the server hands to the client (and to bots). Important fields:
 
-- `call_amount` — chips needed to match `current_bet`.
-- `current_bet` — highest `round_bet` so far this street.
-- `min_raise` — last raise size (the increment).
-- `min_raise_total` — minimum total bet for a legal full raise.
-- `max_total` — `round_bet + chips`, i.e. the most this player can bet (their stack).
-- `can_check`, `can_call`, `can_raise`, `can_short_all_in` — booleans the UI uses to enable buttons.
-- `aggressive_action` — `'raise'`, `'all_in'`, or `'none'`. Tells the UI which label to show.
+- `call_amount` - chips needed to match `current_bet`.
+- `current_bet` - highest `round_bet` so far this street.
+- `min_raise` - last raise size (the increment).
+- `min_raise_total` - minimum total bet for a legal full raise.
+- `max_total` - `round_bet + chips`, i.e. the most this player can bet (their stack).
+- `can_check`, `can_call`, `can_raise`, `can_short_all_in` - booleans the UI uses to enable buttons.
+- `aggressive_action` - `'raise'`, `'all_in'`, or `'none'`. Tells the UI which label to show.
 
 ## Applying an action
 
 `apply_action(sid, action, amount)` is the single entry point. Returns `(player_or_none, event)` where event is one of:
 
-- `continue` — same street, next actor up.
-- `street_end` — moved to next street, action continues.
-- `game_over` — hand is finished (fold-out or showdown). `get_winners`, `get_pot_results`, `winner_hand_details` are now valid.
-- `invalid_action` — `last_action_error` has the reason; nothing changed.
-- `not_your_turn` — sid mismatch; nothing changed.
-- `error` — no current player.
+- `continue` - same street, next actor up.
+- `street_end` - moved to next street, action continues.
+- `game_over` - hand is finished (fold-out or showdown). `get_winners`, `get_pot_results`, `winner_hand_details` are now valid.
+- `invalid_action` - `last_action_error` has the reason; nothing changed.
+- `not_your_turn` - sid mismatch; nothing changed.
+- `error` - no current player.
 
 The `sid` parameter is `None` for server-driven actions (bots, auto-fold for disconnected players).
 
@@ -95,7 +95,7 @@ The host page calls without `for_sid` (so it sees nothing private until showdown
 - Pre-folding (`p.folded = True`) and clearing their hand (`p.hand = []`).
 - Skipping them when assigning the dealer button, small blind, big blind, and first-to-act, via `_next_active_index(from_idx)` (which walks forward to the next index whose player has `chips > 0`).
 
-This keeps the displayed seat order stable across knockouts — the host's table list and the player's "Table" section both keep showing busted players (with `0 chips`, `FOLD` tag) until the game ends.
+This keeps the displayed seat order stable across knockouts - the host's table list and the player's "Table" section both keep showing busted players (with `0 chips`, `FOLD` tag) until the game ends.
 
 End-of-game detection still works because `_finish_game_if_one_player_left` (in `app.py`) counts players with `chips > 0`, not `len(players)`.
 

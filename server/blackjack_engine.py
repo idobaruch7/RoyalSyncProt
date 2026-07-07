@@ -1,4 +1,4 @@
-"""blackjack_engine.py — Prototype
+"""blackjack_engine.py
 Blackjack game logic: deck, player turns, dealer auto-play, payout.
 """
 from game_engine import Deck
@@ -95,7 +95,7 @@ class BlackjackGame:
             elif val == 21:
                 state['status'] = 'standing'
                 self.to_act.pop(0)
-            # else remains 'playing' — player may act again
+            # else remains 'playing' - player may act again
 
         elif action == 'double':
             extra = min(state['bet'], player.chips if player else 0)

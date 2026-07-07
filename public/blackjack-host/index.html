@@ -87,12 +87,38 @@
 
         .row:first-child { border-top: none; padding-top: 0; }
 
+        .felt {
+            border: 2px solid #14532d;
+            border-radius: 120px / 60px;
+            background: radial-gradient(ellipse at center, #1a6b3c 0%, #0f4c2a 70%, #0b3a20 100%);
+            padding: 20px;
+        }
+
         .dealer-section {
             margin-bottom: 14px;
-            border: 1px solid var(--line);
+            border: 1px solid rgba(255, 255, 255, 0.15);
             border-radius: 8px;
-            background: #0f1730;
+            background: rgba(0, 0, 0, 0.25);
             padding: 12px;
+        }
+
+        .felt #players-area {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        .felt .player-row {
+            border-color: rgba(255, 255, 255, 0.15);
+            background: rgba(0, 0, 0, 0.28);
+            flex: 1 1 220px;
+            max-width: 260px;
+            margin-bottom: 0;
+        }
+
+        .felt .player-row.current {
+            background: rgba(52, 211, 153, 0.22);
         }
 
         .section-title {
@@ -252,16 +278,18 @@
                 <span id="phase-badge" class="phase-badge">Waiting</span>
             </div>
 
-            <div class="dealer-section">
-                <div class="section-title">Dealer</div>
-                <div class="cards-strip" id="dealer-cards">
-                    <span class="muted">No cards yet</span>
+            <div class="felt">
+                <div class="dealer-section">
+                    <div class="section-title">Dealer</div>
+                    <div class="cards-strip" id="dealer-cards">
+                        <span class="muted">No cards yet</span>
+                    </div>
+                    <div class="dealer-val" id="dealer-val"></div>
                 </div>
-                <div class="dealer-val" id="dealer-val"></div>
-            </div>
 
-            <div id="players-area">
-                <div class="muted">No active game</div>
+                <div id="players-area">
+                    <div class="muted">No active game</div>
+                </div>
             </div>
         </section>
     </div>
@@ -320,7 +348,7 @@
                 win: 'result-win', blackjack: 'result-blackjack',
                 push: 'result-push', lose: 'result-lose', bust: 'result-bust',
             };
-            const labels = { win: 'WIN +100', blackjack: 'BLACKJACK +150', push: 'PUSH', lose: 'LOSE', bust: 'BUST' };
+            const labels = { win: 'WIN +100', blackjack: 'BLACKJACK +150', push: 'TIE', lose: 'LOSE', bust: 'BUST' };
             const cls = map[result] || 'result-push';
             return `<span class="result-pill ${cls}">${esc(labels[result] || result.toUpperCase())}</span>`;
         }
@@ -377,7 +405,7 @@
                 dealerValEl.textContent = '';
             } else {
                 dealerCardsEl.innerHTML = dc.map(cardMarkup).join('');
-                dealerValEl.textContent = `Value: ${state.dealer_value}${state.state === 'round_over' && state.dealer_value > 21 ? ' — BUST' : ''}`;
+                dealerValEl.textContent = `Value: ${state.dealer_value}${state.state === 'round_over' && state.dealer_value > 21 ? ' - BUST' : ''}`;
             }
 
             // Players
@@ -416,8 +444,9 @@
         socket.on('bj_round_over', (data) => {
             roundOver = true;
             updateButtons();
+            const RESULT_LABELS = { win: 'win', blackjack: 'blackjack', push: 'tie', lose: 'lose', bust: 'bust' };
             const results = data.results || {};
-            const parts = Object.entries(results).map(([name, res]) => `${name}: ${res}`);
+            const parts = Object.entries(results).map(([name, res]) => `${name}: ${RESULT_LABELS[res] || res}`);
             showToast('Round over! ' + (parts.join(' · ') || ''), '#34d399');
         });
 
