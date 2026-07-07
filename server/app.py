@@ -10,13 +10,17 @@ from flask_socketio import SocketIO, emit
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import random
+import sqlite3
 import string
+import time
 
+from blackjack_engine import BlackjackGame, hand_value as bj_hand_value
 from bot_player import BotPlayer, HumanPlayer
 from game_engine import Game
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PUBLIC_DIR = os.path.join(BASE_DIR, 'public')
+DB_PATH = os.path.join(BASE_DIR, 'royalsync.db')
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('ROYALTEST_PROTOTYPE_SECRET', 'royaltest-prototype-secret')
@@ -31,6 +35,72 @@ current_game = None
 session_to_player = {}
 game_active = False
 join_queue = []
+
+
+def _db_init():
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS players (
+                session_id TEXT PRIMARY KEY,
+                nickname   TEXT NOT NULL,
+                chips      INTEGER NOT NULL DEFAULT 1000,
+                game       TEXT NOT NULL DEFAULT 'poker',
+                last_seen  REAL NOT NULL DEFAULT 0
+            )
+        ''')
+        conn.commit()
+
+
+def _db_upsert_player(session_id: str, nickname: str, chips: int, game: str):
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute('''
+            INSERT INTO players (session_id, nickname, chips, game, last_seen)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(session_id) DO UPDATE SET
+                nickname  = excluded.nickname,
+                chips     = excluded.chips,
+                game      = excluded.game,
+                last_seen = excluded.last_seen
+        ''', (session_id, nickname, chips, game, time.time()))
+        conn.commit()
+
+
+def _db_update_chips_bulk(updates):
+    """updates: list of (chips, session_id)"""
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.executemany('UPDATE players SET chips = ? WHERE session_id = ?', updates)
+        conn.commit()
+
+
+def _db_reset_chips(game: str, amount: int = 1000):
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute('UPDATE players SET chips = ? WHERE game = ?', (amount, game))
+        conn.commit()
+
+
+def _db_load_all():
+    """Restore persisted players into in-memory dicts on startup."""
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute('SELECT session_id, nickname, chips, game FROM players').fetchall()
+    except Exception as exc:
+        print(f'[db] load failed: {exc}')
+        return
+    for row in rows:
+        entry = {
+            'session_id': row['session_id'],
+            'nickname': row['nickname'],
+            'chips': row['chips'],
+            'sid': None,
+            'is_connected': False,
+            'state': 'lobby',
+        }
+        if row['game'] == 'blackjack':
+            bj_session_players[row['session_id']] = entry
+        else:
+            session_players[row['session_id']] = entry
+    print(f'[db] loaded {len(rows)} player(s) from {DB_PATH}')
 
 
 def _lobby_players():
@@ -83,6 +153,16 @@ def join():
     return send_from_directory(os.path.join(PUBLIC_DIR, 'player'), 'index.html')
 
 
+@app.route('/blackjack-host')
+def bj_host_page():
+    return send_from_directory(os.path.join(PUBLIC_DIR, 'blackjack-host'), 'index.html')
+
+
+@app.route('/blackjack-join')
+def bj_join_page():
+    return send_from_directory(os.path.join(PUBLIC_DIR, 'blackjack-player'), 'index.html')
+
+
 @app.route('/public/<path:filename>')
 def public_files(filename):
     return send_from_directory(PUBLIC_DIR, filename)
@@ -95,31 +175,42 @@ def on_connect():
 
 @socketio.on('disconnect')
 def on_disconnect():
-    session_id = sid_to_session.pop(_request_sid(), None)
-    if not session_id:
-        return
+    sid = _request_sid()
 
-    info = session_players.get(session_id)
-    if not info:
-        return
+    # Poker disconnect
+    session_id = sid_to_session.pop(sid, None)
+    if session_id:
+        info = session_players.get(session_id)
+        if info:
+            info['sid'] = None
+            info['is_connected'] = False
+            print(f'[prototype][disconnect] poker:{info["nickname"]}')
+            player = session_to_player.get(session_id)
+            if player:
+                player.sid = None
+                player.is_connected = False
+            _broadcast_lobby()
+            _broadcast_queue()
+            if current_game:
+                if not _finish_game_if_too_few_connected():
+                    _process_automatic_turns()
+                    _broadcast_game_state()
 
-    info['sid'] = None
-    info['is_connected'] = False
-    print(f'[prototype][disconnect] {info["nickname"]}')
-
-    player = session_to_player.get(session_id)
-    if player:
-        player.sid = None
-        player.is_connected = False
-
-    _broadcast_lobby()
-    _broadcast_queue()
-
-    if current_game:
-        if _finish_game_if_too_few_connected():
-            return
-        _process_automatic_turns()
-        _broadcast_game_state()
+    # Blackjack disconnect
+    bj_session_id = bj_sid_to_session.pop(sid, None)
+    if bj_session_id:
+        info = bj_session_players.get(bj_session_id)
+        if info:
+            info['sid'] = None
+            info['is_connected'] = False
+            player = bj_session_to_player.get(bj_session_id)
+            if player:
+                player.sid = None
+                player.is_connected = False
+            _bj_broadcast_lobby()
+            if bj_current_game:
+                _bj_process_auto_turns()
+                _bj_broadcast_state()
 
 
 @socketio.on('host_connected')
@@ -144,6 +235,29 @@ def on_join_game(data):
         return
 
     existing = session_players.get(session_id)
+
+    # Restore from DB if the server restarted and wiped in-memory state.
+    if not existing:
+        try:
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                row = conn.execute(
+                    "SELECT nickname, chips FROM players WHERE session_id = ? AND game = 'poker'",
+                    (session_id,),
+                ).fetchone()
+        except Exception:
+            row = None
+        if row:
+            session_players[session_id] = {
+                'session_id': session_id,
+                'nickname': row['nickname'],
+                'chips': row['chips'],
+                'sid': None,
+                'is_connected': False,
+                'state': 'lobby',
+            }
+            existing = session_players[session_id]
+
     if existing:
         _attach_session_to_sid(session_id, _request_sid())
         _sync_player_connection(session_id)
@@ -177,6 +291,7 @@ def on_join_game(data):
         'is_connected': False,
         'state': 'lobby',
     }
+    _db_upsert_player(session_id, nickname, 1000, 'poker')
     _attach_session_to_sid(session_id, _request_sid())
 
     if game_active:
@@ -308,6 +423,7 @@ def on_restart_game():
     socketio.emit('game_finished', {'winner': None, 'restarted': True})
     for info in session_players.values():
         info['chips'] = 1000
+    _db_reset_chips('poker', 1000)
     _end_game_session()
 
 
@@ -633,10 +749,14 @@ def _sync_player_connection(session_id: str):
 
 
 def _sync_all_game_player_chips():
+    updates = []
     for session_id, player in session_to_player.items():
         info = session_players.get(session_id)
         if info:
             info['chips'] = player.chips
+            updates.append((player.chips, session_id))
+    if updates:
+        _db_update_chips_bulk(updates)
 
 
 def _emit_session_state(session_id: str):
@@ -707,6 +827,297 @@ def _request_sid() -> str:
     return str(getattr(request, 'sid', ''))
 
 
+# ── Blackjack ────────────────────────────────────────────────────────────────
+
+BJ_MAX_PLAYERS = 7
+
+bj_session_players = {}
+bj_sid_to_session = {}
+bj_current_game = None
+bj_session_to_player = {}
+bj_game_active = False
+
+
+@socketio.on('bj_host_connected')
+def on_bj_host_connected():
+    emit('bj_lobby_update', _bj_lobby_snapshot())
+    if bj_current_game:
+        emit('bj_round_starting', {})
+        emit('bj_game_state', bj_current_game.to_dict())
+
+
+@socketio.on('bj_join_game')
+def on_bj_join_game(data):
+    global bj_game_active
+    nickname = (data.get('nickname') or '').strip()
+    session_id = (data.get('session_id') or '').strip()
+
+    if not session_id:
+        emit('bj_join_error', {'message': 'Missing browser session. Refresh and try again.'})
+        return
+    if len(session_id) > 100:
+        emit('bj_join_error', {'message': 'Invalid browser session.'})
+        return
+
+    existing = bj_session_players.get(session_id)
+
+    if not existing:
+        try:
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                row = conn.execute(
+                    "SELECT nickname, chips FROM players WHERE session_id = ? AND game = 'blackjack'",
+                    (session_id,),
+                ).fetchone()
+        except Exception:
+            row = None
+        if row:
+            bj_session_players[session_id] = {
+                'session_id': session_id,
+                'nickname': row['nickname'],
+                'chips': row['chips'],
+                'sid': None,
+                'is_connected': False,
+                'state': 'lobby',
+            }
+            existing = bj_session_players[session_id]
+
+    if existing:
+        _bj_attach_session(session_id, _request_sid())
+        _bj_sync_player_connection(session_id)
+        emit('bj_join_success', {
+            'nickname': existing['nickname'], 'chips': existing['chips'], 'reconnected': True,
+        })
+        _bj_broadcast_lobby()
+        if bj_current_game:
+            emit('bj_round_starting', {})
+            emit('bj_game_state', bj_current_game.to_dict())
+        return
+
+    if bj_game_active:
+        emit('bj_join_error', {'message': 'Game in progress. Wait for it to finish.'})
+        return
+
+    lobby_count = len([p for p in bj_session_players.values() if p['state'] == 'lobby'])
+    if lobby_count >= BJ_MAX_PLAYERS:
+        emit('bj_join_error', {'message': f'Table is full (max {BJ_MAX_PLAYERS}).'})
+        return
+
+    if not nickname:
+        emit('bj_join_error', {'message': 'Nickname cannot be empty.'})
+        return
+    if len(nickname) > 20:
+        emit('bj_join_error', {'message': 'Nickname must be 20 characters or less.'})
+        return
+    if any(p['nickname'] == nickname for p in bj_session_players.values()):
+        emit('bj_join_error', {'message': f'"{nickname}" is already taken.'})
+        return
+
+    bj_session_players[session_id] = {
+        'session_id': session_id, 'nickname': nickname, 'chips': 1000,
+        'sid': None, 'is_connected': False, 'state': 'lobby',
+    }
+    _db_upsert_player(session_id, nickname, 1000, 'blackjack')
+    _bj_attach_session(session_id, _request_sid())
+    emit('bj_join_success', {'nickname': nickname, 'chips': 1000})
+    _bj_broadcast_lobby()
+
+
+@socketio.on('bj_start_round')
+def on_bj_start_round():
+    global bj_current_game, bj_session_to_player, bj_game_active
+
+    lobby = [
+        info for info in bj_session_players.values()
+        if info['state'] == 'lobby' and info['is_connected']
+    ]
+    if not lobby:
+        emit('bj_start_error', {'message': 'Need at least 1 connected player to start.'})
+        return
+
+    players = []
+    bj_session_to_player = {}
+    for session_id, info in bj_session_players.items():
+        if info['state'] != 'lobby' or not info['is_connected']:
+            continue
+        info['state'] = 'game'
+        player = HumanPlayer(info['nickname'], session_id, info['sid'], info['chips'])
+        player.is_connected = True
+        players.append(player)
+        bj_session_to_player[session_id] = player
+
+    bj_current_game = BlackjackGame(players)
+    bj_game_active = True
+    bj_current_game.start_round()
+
+    print(f'[blackjack][start] {len(players)} players')
+    socketio.emit('bj_round_starting', {})
+    _bj_broadcast_lobby()
+    _bj_broadcast_state()
+    if bj_current_game.state == 'round_over':
+        _bj_emit_round_over()
+    else:
+        _bj_process_auto_turns()
+
+
+@socketio.on('bj_player_action')
+def on_bj_player_action(data):
+    if not bj_current_game or not bj_game_active:
+        return
+    action = (data.get('action') or '').strip().lower()
+    session_id = bj_sid_to_session.get(_request_sid())
+    if not session_id:
+        return
+    _bj_apply_action(session_id, action)
+
+
+@socketio.on('bj_next_round')
+def on_bj_next_round():
+    global bj_current_game
+    if not bj_current_game:
+        return
+
+    _bj_sync_chips()
+
+    active_players = [p for p in bj_current_game.players if p.chips > 0]
+    if not active_players:
+        socketio.emit('bj_game_finished', {'message': 'All players are out of chips!'})
+        _bj_end_session()
+        return
+
+    bj_current_game.players = active_players
+    bj_current_game.start_round()
+
+    socketio.emit('bj_round_starting', {})
+    _bj_broadcast_state()
+    if bj_current_game.state == 'round_over':
+        _bj_emit_round_over()
+    else:
+        _bj_process_auto_turns()
+
+
+@socketio.on('bj_restart_game')
+def on_bj_restart_game():
+    for info in bj_session_players.values():
+        info['chips'] = 1000
+    _db_reset_chips('blackjack', 1000)
+    socketio.emit('bj_game_finished', {'message': 'Game restarted. Chips reset to 1000.'})
+    _bj_end_session()
+
+
+def _bj_emit_round_over():
+    if not bj_current_game:
+        return
+    results_by_name = {
+        p.nickname: bj_current_game.results.get(p.session_id)
+        for p in bj_current_game.players
+    }
+    socketio.emit('bj_round_over', {'results': results_by_name})
+
+
+def _bj_apply_action(session_id, action):
+    if not bj_current_game:
+        return
+
+    event = bj_current_game.apply_action(session_id, action)
+    _bj_sync_chips()
+    _bj_broadcast_state()
+
+    if event == 'round_over':
+        _bj_emit_round_over()
+    elif event == 'continue':
+        _bj_process_auto_turns()
+
+
+def _bj_process_auto_turns():
+    while bj_current_game and bj_current_game.state == 'player_turns':
+        player = bj_current_game.current_player()
+        if player is None:
+            return
+        if not getattr(player, 'is_connected', True):
+            event = bj_current_game.apply_action(player.session_id, 'stand')
+            _bj_sync_chips()
+            _bj_broadcast_state()
+            if event == 'round_over':
+                _bj_emit_round_over()
+                return
+            continue
+        _bj_notify_current_player()
+        return
+
+
+def _bj_notify_current_player():
+    if not bj_current_game:
+        return
+    player = bj_current_game.current_player()
+    if player is None or not getattr(player, 'sid', None):
+        return
+    state = bj_current_game.player_states.get(player.session_id, {})
+    cards = state.get('cards', [])
+    val = bj_hand_value(cards) if cards else 0
+    can_double = len(cards) == 2 and player.chips > 0
+    socketio.emit('bj_your_turn', {'hand_value': val, 'can_double': can_double}, to=player.sid)
+
+
+def _bj_broadcast_state():
+    if bj_current_game:
+        socketio.emit('bj_game_state', bj_current_game.to_dict())
+
+
+def _bj_broadcast_lobby():
+    socketio.emit('bj_lobby_update', _bj_lobby_snapshot())
+
+
+def _bj_lobby_snapshot():
+    return [
+        {'nickname': info['nickname'], 'chips': info['chips'], 'is_connected': info['is_connected']}
+        for info in bj_session_players.values()
+        if info['state'] == 'lobby'
+    ]
+
+
+def _bj_attach_session(session_id, sid):
+    info = bj_session_players[session_id]
+    old_sid = info.get('sid')
+    if old_sid and old_sid != sid:
+        bj_sid_to_session.pop(old_sid, None)
+    bj_sid_to_session[sid] = session_id
+    info['sid'] = sid
+    info['is_connected'] = True
+
+
+def _bj_sync_player_connection(session_id):
+    player = bj_session_to_player.get(session_id)
+    info = bj_session_players.get(session_id)
+    if player and info:
+        player.sid = info['sid']
+        player.is_connected = info['is_connected']
+
+
+def _bj_sync_chips():
+    updates = []
+    for session_id, player in bj_session_to_player.items():
+        info = bj_session_players.get(session_id)
+        if info:
+            info['chips'] = player.chips
+            updates.append((player.chips, session_id))
+    if updates:
+        _db_update_chips_bulk(updates)
+
+
+def _bj_end_session():
+    global bj_current_game, bj_session_to_player, bj_game_active
+    bj_game_active = False
+    bj_current_game = None
+    bj_session_to_player = {}
+    for info in bj_session_players.values():
+        info['state'] = 'lobby'
+    _bj_broadcast_lobby()
+
+
+_db_init()
+_db_load_all()
+
 if __name__ == '__main__':
     bind_host = os.getenv('ROYALTEST_PROTOTYPE_HOST', '0.0.0.0')
     port = int(os.getenv('ROYALTEST_PROTOTYPE_PORT', '5050'))
@@ -716,4 +1127,4 @@ if __name__ == '__main__':
     print(f'  Prototype host page : http://localhost:{port}/host')
     print(f'  Prototype player URL: http://{local_ip}:{port}/join')
     print()
-    socketio.run(app, host=bind_host, port=port, debug=debug)
+    socketio.run(app, host=bind_host, port=port, debug=debug, allow_unsafe_werkzeug=True)

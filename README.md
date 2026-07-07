@@ -1,6 +1,6 @@
-# RoyalTest Prototype (Standalone)
+# RoyalSyncProt
 
-A self-contained Texas Hold'em demo: Flask + Socket.IO server, three static HTML pages, in-memory state, no database.
+A self-contained multiplayer card game platform featuring Texas Hold'em poker and Blackjack. Built with Flask + Socket.IO server and static HTML pages, with in-memory state and no database.
 
 ## Quickstart
 
@@ -16,31 +16,45 @@ Then open the URLs below. The server prints both a host URL and a LAN player URL
 
 ## URLs
 
+### Texas Hold'em
 - Landing page: `http://localhost:5050/`
 - Host page (table monitor + controls): `http://localhost:5050/host`
-- Player page (join the table from your device): `http://localhost:5050/join`
+- Player page (join the table from your device): `http://localhost:5050/player`
+
+### Blackjack
+- Host page (dealer console): `http://localhost:5050/blackjack-host`
+- Player page (player view): `http://localhost:5050/blackjack-player`
 
 ## Project layout
 
 ```
-prototype_royalsync/
+RoyalSyncProt/
 ├── server/
-│   ├── app.py            # Flask + Socket.IO, lobby & session management
-│   ├── game_engine.py    # Cards, hand evaluation, betting state machine
-│   └── bot_player.py     # Human/Bot player classes + bot strategies
+│   ├── app.py                    # Flask + Socket.IO, lobby & session management
+│   ├── game_engine.py            # Texas Hold'em: cards, hand evaluation, betting
+│   ├── blackjack_engine.py       # Blackjack: game logic and hand evaluation
+│   └── bot_player.py             # Human/Bot player classes + bot strategies
 ├── public/
-│   ├── index.html        # Landing page
-│   ├── host/index.html   # Host console
-│   └── player/index.html # Player view
-└── docs/                 # Dev-facing docs (read these first)
-    ├── ARCHITECTURE.md   # Big-picture design, socket events, lifecycle
-    ├── GAME_ENGINE.md    # Poker rules + state machine implementation
-    └── BOTS.md           # How bots are scheduled and how personalities decide
+│   ├── index.html                # Landing page
+│   ├── host/index.html           # Texas Hold'em host console
+│   ├── player/index.html         # Texas Hold'em player view
+│   ├── blackjack-host/index.html # Blackjack dealer console
+│   └── blackjack-player/index.html # Blackjack player view
+└── docs/                         # Dev-facing docs (read these first)
+    ├── ARCHITECTURE.md           # Big-picture design, socket events, lifecycle
+    ├── GAME_ENGINE.md            # Poker rules + state machine implementation
+    └── BOTS.md                   # How bots are scheduled and how personalities decide
 ```
 
 ## How it works (one-paragraph version)
 
-The server holds a single in-memory game. Players join via `/join` with a nickname; the host opens `/host`, can add/remove bots and click **Start Game**. Bots are server-side and act on a small randomized "thinking" delay. Every action (fold/check/call/raise) emits a toast to all clients. Busted players stay seated so the table view never re-shuffles. See `docs/ARCHITECTURE.md` for the full picture.
+The server supports two card games with in-memory state:
+
+**Texas Hold'em:** Players join via `/player` with a nickname; the host opens `/host`, can add/remove bots and click **Start Game**. Bots are server-side and act on a small randomized "thinking" delay. Every action (fold/check/call/raise) emits a toast to all clients. Busted players stay seated so the table view never re-shuffles.
+
+**Blackjack:** Players connect to `/blackjack-player` while the dealer/host manages the game from `/blackjack-host`. Supports hit/stand actions with multiple rounds per session.
+
+See `docs/ARCHITECTURE.md` for the full picture.
 
 ## Optional environment variables
 

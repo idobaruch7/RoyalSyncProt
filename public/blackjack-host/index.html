@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blackjack Host</title>
+    <style>
+        :root {
+            --bg: #0b1020;
+            --panel: #111831;
+            --line: #22325f;
+            --text: #e8ecff;
+            --muted: #9aa6cf;
+            --accent: #60a5fa;
+            --good: #34d399;
+            --warn: #f59e0b;
+            --danger: #f87171;
+            --gold: #fbbf24;
+            --radius: 10px;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            background: linear-gradient(180deg, #0f1730 0%, var(--bg) 70%);
+            color: var(--text);
+            font-family: Arial, sans-serif;
+            min-height: 100vh;
+            padding: 18px;
+        }
+
+        .grid {
+            display: grid;
+            gap: 14px;
+            grid-template-columns: 340px 1fr;
+        }
+
+        .card {
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            padding: 14px;
+        }
+
+        h1, h2 { margin: 0; font-weight: 700; }
+        h1 { font-size: 1.35rem; }
+        h2 { font-size: 1rem; margin-bottom: 10px; }
+
+        .muted { color: var(--muted); }
+
+        .join-url {
+            margin-top: 10px;
+            font-weight: 700;
+            color: var(--accent);
+            word-break: break-all;
+        }
+
+        .controls {
+            margin-top: 12px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        button {
+            border: none;
+            border-radius: 8px;
+            padding: 10px 12px;
+            font-weight: 700;
+            cursor: pointer;
+            background: var(--accent);
+            color: #0b1020;
+        }
+
+        button[disabled] { opacity: 0.45; cursor: not-allowed; }
+        .secondary { background: #475569; color: #f8fafc; }
+        .danger-btn { background: #7f1d1d; color: #fecaca; }
+
+        .row {
+            display: flex;
+            justify-content: space-between;
+            border-top: 1px solid var(--line);
+            padding: 8px 0;
+            font-size: 0.94rem;
+        }
+
+        .row:first-child { border-top: none; padding-top: 0; }
+
+        .dealer-section {
+            margin-bottom: 14px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: #0f1730;
+            padding: 12px;
+        }
+
+        .section-title {
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: var(--muted);
+            margin-bottom: 8px;
+        }
+
+        .cards-strip {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            min-height: 69px;
+            align-items: center;
+        }
+
+        .mini-card {
+            width: 51px;
+            height: 69px;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+            background: #f8fafc;
+            color: #0f172a;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 5px;
+            font-weight: 700;
+            box-shadow: 0 2px 8px rgba(2,6,23,.35);
+        }
+
+        .mini-card.red { color: #b91c1c; }
+        .mini-card .rank { font-size: 2.04rem; line-height: 1; }
+        .mini-card .suit { font-size: 2.3rem; line-height: 1; align-self: center; transform: translateY(-5px); }
+        .mini-card.hidden { background: #1e3a5f; border-color: #2d4a7a; color: #4a7abf; display: flex; align-items: center; justify-content: center; }
+        .mini-card.hidden .rank { font-size: 2.5rem; line-height: 1; }
+
+        .dealer-val {
+            margin-top: 6px;
+            font-size: 0.88rem;
+            color: var(--muted);
+        }
+
+        .player-row {
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: #0f1730;
+            padding: 10px 12px;
+            margin-bottom: 8px;
+        }
+
+        .player-row.current {
+            border-color: rgba(52,211,153,.5);
+            background: rgba(52,211,153,.06);
+        }
+
+        .player-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+
+        .player-name { font-weight: 700; font-size: 0.95rem; }
+        .player-chips { color: var(--good); font-weight: 700; font-size: 0.88rem; }
+
+        .player-info {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .pill {
+            display: inline-block;
+            border-radius: 999px;
+            padding: 2px 8px;
+            font-size: 0.75rem;
+            font-weight: 700;
+        }
+
+        .pill-playing   { background: #1e40af; color: #bfdbfe; }
+        .pill-standing  { background: #374151; color: #9ca3af; }
+        .pill-bust      { background: #7f1d1d; color: #fecaca; }
+        .pill-blackjack { background: #78350f; color: #fde68a; }
+        .pill-sitting   { background: #1f2937; color: #6b7280; }
+        .pill-current   { background: rgba(52,211,153,.2); color: #6ee7b7; border: 1px solid rgba(52,211,153,.4); }
+
+        .result-pill { font-size: 0.85rem; padding: 3px 10px; border-radius: 999px; font-weight: 700; }
+        .result-win      { background: #14532d; color: #86efac; }
+        .result-blackjack{ background: #78350f; color: #fde68a; }
+        .result-push     { background: #374151; color: #d1d5db; }
+        .result-lose     { background: #450a0a; color: #fca5a5; }
+        .result-bust     { background: #450a0a; color: #fca5a5; }
+
+        .hand-val { font-size: 0.85rem; color: var(--muted); }
+        .hand-val.over { color: var(--danger); }
+        .hand-val.bj   { color: var(--gold); }
+
+        .bet-tag {
+            font-size: 0.75rem;
+            color: var(--gold);
+        }
+
+        #toasts {
+            position: fixed; right: 16px; bottom: 16px;
+            display: flex; flex-direction: column; gap: 8px;
+            z-index: 1000; pointer-events: none;
+        }
+
+        .toast {
+            min-width: 180px; max-width: 320px;
+            padding: 10px 14px; border-radius: 10px;
+            background: #172033; border: 1px solid var(--line);
+            color: var(--text); font-weight: 700; font-size: 0.95rem;
+            box-shadow: 0 6px 18px rgba(0,0,0,.45);
+            opacity: 0; transform: translateY(6px);
+            transition: opacity 220ms ease, transform 220ms ease;
+        }
+
+        .toast.show { opacity: 1; transform: translateY(0); }
+
+        .phase-badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 999px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            background: #243665;
+            color: #bfdbfe;
+        }
+
+        @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+    <div class="grid">
+        <section class="card">
+            <h1>Blackjack Host</h1>
+            <div class="muted">Fixed bet: 100 chips / round</div>
+            <div class="join-url" id="join-url">Join URL loading...</div>
+            <div class="controls">
+                <button id="btn-start">Start Game</button>
+                <button id="btn-next" class="secondary" disabled>Next Round</button>
+                <button id="btn-restart" class="secondary danger-btn" disabled>Restart</button>
+            </div>
+
+            <h2 style="margin-top:18px;">Lobby <span id="lobby-count" class="phase-badge">0</span></h2>
+            <div id="lobby-list" class="muted">No players in lobby</div>
+        </section>
+
+        <section class="card">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+                <h2 style="margin:0;">Table</h2>
+                <span id="phase-badge" class="phase-badge">Waiting</span>
+            </div>
+
+            <div class="dealer-section">
+                <div class="section-title">Dealer</div>
+                <div class="cards-strip" id="dealer-cards">
+                    <span class="muted">No cards yet</span>
+                </div>
+                <div class="dealer-val" id="dealer-val"></div>
+            </div>
+
+            <div id="players-area">
+                <div class="muted">No active game</div>
+            </div>
+        </section>
+    </div>
+
+    <div id="toasts"></div>
+
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script>
+        const socket = io();
+
+        const joinUrlEl  = document.getElementById('join-url');
+        const btnStart   = document.getElementById('btn-start');
+        const btnNext    = document.getElementById('btn-next');
+        const btnRestart = document.getElementById('btn-restart');
+        const lobbyList  = document.getElementById('lobby-list');
+        const lobbyCount = document.getElementById('lobby-count');
+        const phaseBadge = document.getElementById('phase-badge');
+        const dealerCardsEl = document.getElementById('dealer-cards');
+        const dealerValEl   = document.getElementById('dealer-val');
+        const playersArea   = document.getElementById('players-area');
+        const toastsEl      = document.getElementById('toasts');
+
+        let gameActive = false;
+        let roundOver  = false;
+
+        function esc(v) {
+            const d = document.createElement('div');
+            d.textContent = String(v);
+            return d.innerHTML;
+        }
+
+        function fmt(n) { return Number(n || 0).toLocaleString(); }
+
+        function cardMarkup(card) {
+            if (!card) return '';
+            if (card.rank === '?') {
+                return '<div class="mini-card hidden"><span class="rank">?</span></div>';
+            }
+            const isRed = card.suit === '♥' || card.suit === '♦';
+            return `<div class="mini-card${isRed ? ' red' : ''}"><span class="rank">${esc(card.rank)}</span><span class="suit">${esc(card.suit)}</span></div>`;
+        }
+
+        function statusPill(status, isCurrent) {
+            if (isCurrent) return '<span class="pill pill-current">TURN</span>';
+            const map = {
+                playing: 'pill-playing', standing: 'pill-standing',
+                bust: 'pill-bust', blackjack: 'pill-blackjack', sitting_out: 'pill-sitting',
+            };
+            const cls = map[status] || 'pill-sitting';
+            return `<span class="pill ${cls}">${esc((status || '').toUpperCase().replace('_', ' '))}</span>`;
+        }
+
+        function resultPill(result) {
+            if (!result) return '';
+            const map = {
+                win: 'result-win', blackjack: 'result-blackjack',
+                push: 'result-push', lose: 'result-lose', bust: 'result-bust',
+            };
+            const labels = { win: 'WIN +100', blackjack: 'BLACKJACK +150', push: 'PUSH', lose: 'LOSE', bust: 'BUST' };
+            const cls = map[result] || 'result-push';
+            return `<span class="result-pill ${cls}">${esc(labels[result] || result.toUpperCase())}</span>`;
+        }
+
+        function updateButtons() {
+            btnStart.disabled   = gameActive;
+            btnNext.disabled    = !gameActive || !roundOver;
+            btnRestart.disabled = !gameActive;
+        }
+
+        function showToast(msg, color) {
+            const div = document.createElement('div');
+            div.className = 'toast';
+            div.textContent = msg;
+            if (color) div.style.borderColor = color;
+            toastsEl.appendChild(div);
+            requestAnimationFrame(() => div.classList.add('show'));
+            while (toastsEl.children.length > 5) toastsEl.removeChild(toastsEl.firstChild);
+            setTimeout(() => { div.classList.remove('show'); setTimeout(() => div.remove(), 260); }, 3500);
+        }
+
+        socket.on('connect', () => {
+            joinUrlEl.textContent = `${location.protocol}//${location.hostname}:${location.port}/blackjack-join`;
+            socket.emit('bj_host_connected');
+        });
+
+        socket.on('bj_lobby_update', (players) => {
+            lobbyCount.textContent = String(players.length);
+            if (!players.length) {
+                lobbyList.innerHTML = '<div class="muted">No players in lobby</div>';
+            } else {
+                lobbyList.innerHTML = players.map((p) =>
+                    `<div class="row"><span>${esc(p.nickname)}</span><span style="color:var(--good)">${fmt(p.chips)}</span></div>`
+                ).join('');
+            }
+            if (!gameActive) btnStart.disabled = players.length < 1;
+        });
+
+        socket.on('bj_round_starting', () => {
+            gameActive = true;
+            roundOver = false;
+            phaseBadge.textContent = 'In Progress';
+            updateButtons();
+        });
+
+        socket.on('bj_game_state', (state) => {
+            phaseBadge.textContent = state.state === 'round_over' ? 'Round Over' :
+                                     state.state === 'player_turns' ? 'Player Turns' : state.state;
+
+            // Dealer
+            const dc = state.dealer_cards || [];
+            if (!dc.length) {
+                dealerCardsEl.innerHTML = '<span class="muted">No cards yet</span>';
+                dealerValEl.textContent = '';
+            } else {
+                dealerCardsEl.innerHTML = dc.map(cardMarkup).join('');
+                dealerValEl.textContent = `Value: ${state.dealer_value}${state.state === 'round_over' && state.dealer_value > 21 ? ' — BUST' : ''}`;
+            }
+
+            // Players
+            const players = state.players || [];
+            if (!players.length) {
+                playersArea.innerHTML = '<div class="muted">No active players</div>';
+                return;
+            }
+            playersArea.innerHTML = players.map((p) => {
+                const cards   = p.cards || [];
+                const cardsHtml = cards.length
+                    ? `<div class="cards-strip" style="margin-top:6px">${cards.map(cardMarkup).join('')}</div>`
+                    : '';
+                const valHtml = cards.length
+                    ? `<span class="hand-val${p.hand_value > 21 ? ' over' : p.status === 'blackjack' ? ' bj' : ''}">${p.hand_value}</span>`
+                    : '';
+                const betTag  = p.bet > 0 ? `<span class="bet-tag">bet ${fmt(p.bet)}${p.doubled ? ' (2x)' : ''}</span>` : '';
+                return `
+                <div class="player-row${p.is_current ? ' current' : ''}">
+                    <div class="player-header">
+                        <span class="player-name">${esc(p.nickname)}</span>
+                        <span class="player-chips">${fmt(p.chips)} chips</span>
+                    </div>
+                    <div class="player-info">
+                        ${statusPill(p.status, p.is_current)}
+                        ${valHtml}
+                        ${betTag}
+                        ${resultPill(p.result)}
+                        ${p.is_connected === false ? '<span class="pill pill-sitting">OFFLINE</span>' : ''}
+                    </div>
+                    ${cardsHtml}
+                </div>`;
+            }).join('');
+        });
+
+        socket.on('bj_round_over', (data) => {
+            roundOver = true;
+            updateButtons();
+            const results = data.results || {};
+            const parts = Object.entries(results).map(([name, res]) => `${name}: ${res}`);
+            showToast('Round over! ' + (parts.join(' · ') || ''), '#34d399');
+        });
+
+        socket.on('bj_game_finished', (data) => {
+            gameActive = false;
+            roundOver = false;
+            phaseBadge.textContent = 'Finished';
+            dealerCardsEl.innerHTML = '<span class="muted">No cards yet</span>';
+            dealerValEl.textContent = '';
+            playersArea.innerHTML = '<div class="muted">No active game</div>';
+            updateButtons();
+            showToast(data.message || 'Game finished.', '#60a5fa');
+        });
+
+        socket.on('bj_start_error', (data) => {
+            alert((data && data.message) || 'Cannot start.');
+        });
+
+        btnStart.addEventListener('click', () => socket.emit('bj_start_round'));
+        btnNext.addEventListener('click', () => socket.emit('bj_next_round'));
+        btnRestart.addEventListener('click', () => {
+            if (!confirm('Restart? All chips reset to 1000.')) return;
+            socket.emit('bj_restart_game');
+        });
+    </script>
+</body>
+</html>

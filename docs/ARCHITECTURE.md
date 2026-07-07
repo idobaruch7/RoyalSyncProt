@@ -1,31 +1,36 @@
 # Architecture Overview
 
-This prototype is a self-contained Texas Hold'em demo. It runs as a single Flask + Socket.IO server with three static HTML pages and an in-memory game state. There is no database, no persistence layer, and no auth.
+This is a multi-game platform supporting Texas Hold'em poker and Blackjack. It runs as a single Flask + Socket.IO server with static HTML pages and in-memory game state. There is no database, no persistence layer, and no auth.
+
+**Note:** This document primarily describes the Texas Hold'em implementation. Blackjack has a similar architecture with simpler game logic (dealer vs. players, no multi-way pots).
 
 ## Top-level layout
 
 ```
-prototype_royalsync/
+RoyalSyncProt/
 ├── server/
-│   ├── app.py            # Flask + Socket.IO server, lobby, session/queue mgmt
-│   ├── game_engine.py    # Cards, deck, hand evaluation, betting state machine
-│   └── bot_player.py     # Player base class + Human/Bot subclasses & strategies
+│   ├── app.py                    # Flask + Socket.IO server, lobby, session/queue mgmt
+│   ├── game_engine.py            # Texas Hold'em: cards, deck, hand evaluation, betting state machine
+│   ├── blackjack_engine.py       # Blackjack: game logic and hand evaluation
+│   └── bot_player.py             # Player base class + Human/Bot subclasses & strategies
 └── public/
-    ├── index.html        # Landing page (links to /host and /join)
-    ├── host/index.html   # Host/table view — shows lobby, bots, full board
-    └── player/index.html # Player view — joins via nickname, sees own hole cards
+    ├── index.html                # Landing page
+    ├── host/index.html           # Texas Hold'em: host/table view
+    ├── player/index.html         # Texas Hold'em: player view
+    ├── blackjack-host/index.html # Blackjack: dealer console
+    └── blackjack-player/index.html # Blackjack: player view
 ```
 
 ## Runtime model
 
-- **One process, one table.** Global state in `app.py` (`session_players`, `current_game`, `join_queue`, `game_active`) holds a single active game. Restarting the server wipes everything.
-- **Sessions are browser-scoped.** Each player browser generates a `session_id` (kept in `localStorage`) and sends it with `join_game`. The server maps `session_id → player info` and `sid (socket id) → session_id`. This is what allows reconnect after a refresh: the socket id changes, but the session id is stable.
-- **Two roles:**
-  - **Host** (`/host`) — passive observer of lobby + table. Can add bots, start the game, advance to next hand. Doesn't play.
-  - **Player** (`/join`) — picks a nickname, joins the lobby, plays the hand.
-- **Bots** are server-side only. They have a `session_id` (prefixed `bot-`) but no socket; they're always treated as connected.
+- **One process, multiple games.** Global state in `app.py` holds separate in-memory game instances: one Texas Hold'em table and one Blackjack table. Each maintains its own `session_players`, `current_game`, etc. Restarting the server wipes everything.
+- **Sessions are browser-scoped.** Each player browser generates a `session_id` (kept in `localStorage`) and sends it with `join_game`. The server maps `session_id → player info` and `sid (socket id) → session_id`. This allows reconnect after a refresh.
+- **Two roles (poker-specific):**
+  - **Host** (`/host` or `/blackjack-host`) — manages the game lobby, can add/remove bots (poker), start rounds, advance hands.
+  - **Player** (`/player` or `/blackjack-player`) — picks a nickname, joins the game, plays hands.
+- **Bots** are server-side only (poker-specific). They have a `session_id` (prefixed `bot-`) but no socket; they're always treated as connected.
 
-## Lifecycle of a hand
+## Lifecycle of a hand (Texas Hold'em)
 
 1. Players join the lobby → `session_players[sid].state = 'lobby'`.
 2. Host clicks **Start** → `on_start_game` builds `Player` objects (Human or Bot) and constructs a `Game`. `game_active = True`.

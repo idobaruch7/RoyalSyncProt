@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blackjack Player</title>
+    <style>
+        :root {
+            --bg: #111827;
+            --panel: #1f2937;
+            --line: #374151;
+            --text: #f9fafb;
+            --muted: #9ca3af;
+            --accent: #34d399;
+            --warn: #f59e0b;
+            --danger: #f87171;
+            --gold: #fbbf24;
+            --radius: 10px;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: Arial, sans-serif;
+            color: var(--text);
+            background: radial-gradient(circle at top, #1f2937 0%, var(--bg) 55%);
+            padding: 14px;
+        }
+
+        .screen { display: none; }
+        .screen.active { display: block; }
+
+        .card {
+            max-width: 640px;
+            margin: 0 auto;
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 14px;
+        }
+
+        h1, h2 { margin: 0; }
+        h1 { font-size: 1.35rem; }
+        h2 { font-size: 1.15rem; }
+
+        .muted { color: var(--muted); font-size: 0.92rem; }
+        .error { color: var(--danger); min-height: 1.2em; font-size: 0.9rem; }
+
+        input {
+            width: 100%; margin-top: 10px; padding: 11px;
+            border-radius: 8px; border: 1px solid var(--line);
+            background: #0f172a; color: var(--text); font-size: 1rem;
+        }
+
+        button {
+            border: none; border-radius: 8px; padding: 10px 14px;
+            font-weight: 700; cursor: pointer; font-size: 0.95rem;
+        }
+
+        .primary  { background: var(--accent); color: #022c22; }
+        .secondary{ background: #475569; color: #f8fafc; }
+        .danger   { background: #7f1d1d; color: #fecaca; }
+        .warn-btn { background: #78350f; color: #fde68a; }
+        .gold-btn { background: #78350f; color: #fde68a; }
+
+        button[disabled] { opacity: 0.4; cursor: not-allowed; }
+
+        .join-btn { margin-top: 10px; width: 100%; }
+
+        .status {
+            margin-top: 10px; border-radius: 8px;
+            border: 1px solid var(--line); background: #0f172a;
+            padding: 10px; min-height: 42px;
+        }
+
+        .turn-indicator {
+            margin-top: 10px; border-radius: 8px;
+            border: 1px solid #334155; background: #172033;
+            color: #cbd5e1; font-weight: 700; text-align: center; padding: 10px;
+        }
+
+        .turn-indicator.active {
+            border-color: #34d399; background: #0d2c22; color: #6ee7b7;
+            box-shadow: 0 0 0 2px rgba(52,211,153,.25);
+            animation: pulse-turn 1.1s ease-in-out infinite;
+        }
+
+        @keyframes pulse-turn {
+            0%, 100% { transform: scale(1); }
+            50%       { transform: scale(1.01); }
+        }
+
+        .section {
+            margin-top: 10px; border: 1px solid var(--line);
+            border-radius: 8px; background: #0f172a; padding: 10px;
+        }
+
+        .section-title {
+            font-size: 0.78rem; text-transform: uppercase;
+            color: var(--muted); margin-bottom: 8px; letter-spacing: .03em;
+        }
+
+        .cards-strip {
+            display: flex; flex-wrap: wrap; gap: 6px;
+            min-height: 50px; align-items: center;
+        }
+
+        .mini-card {
+            width: 51px; height: 69px; border-radius: 6px;
+            border: 1px solid #e2e8f0; background: #f8fafc; color: #0f172a;
+            display: flex; flex-direction: column; justify-content: space-between;
+            padding: 4px; font-weight: 700;
+            box-shadow: 0 2px 8px rgba(2,6,23,.35);
+        }
+
+        .mini-card.red { color: #b91c1c; }
+        .mini-card .rank { font-size: 2.04rem; line-height: 1; }
+        .mini-card .suit { font-size: 2.3rem; line-height: 1; align-self: center; transform: translateY(-5px); }
+        .mini-card.hidden { background: #1e3a5f; border-color: #2d4a7a; color: #4a7abf; display: flex; align-items: center; justify-content: center; }
+        .mini-card.hidden .rank { font-size: 2.5rem; }
+
+        .hand-value {
+            margin-top: 6px; font-size: 1.1rem; font-weight: 700;
+        }
+
+        .hand-value.bust { color: var(--danger); }
+        .hand-value.bj   { color: var(--gold); }
+        .hand-value.good { color: var(--accent); }
+
+        .actions {
+            margin-top: 12px;
+            display: flex; gap: 10px; flex-wrap: wrap;
+        }
+
+        .actions button { flex: 1; min-width: 80px; }
+
+        .seat {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 8px; border-top: 1px solid #1e293b; gap: 8px;
+        }
+
+        .seat:first-child { border-top: none; }
+        .seat.current {
+            background: rgba(52,211,153,.12); border-radius: 8px;
+            border: 1px solid rgba(52,211,153,.4); padding: 7px;
+        }
+
+        .seat .name { font-weight: 700; }
+        .seat-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+        .chips-val { color: var(--accent); font-weight: 700; font-size: 0.9rem; }
+
+        .pill {
+            display: inline-block; border-radius: 999px;
+            padding: 2px 7px; font-size: 0.72rem; font-weight: 700;
+        }
+
+        .pill-playing   { background: #1e40af; color: #bfdbfe; }
+        .pill-standing  { background: #374151; color: #9ca3af; }
+        .pill-bust      { background: #7f1d1d; color: #fecaca; }
+        .pill-blackjack { background: #78350f; color: #fde68a; }
+        .pill-sitting   { background: #1f2937; color: #6b7280; }
+
+        .result-banner {
+            margin-top: 12px; border-radius: 8px; padding: 12px;
+            text-align: center; font-size: 1.2rem; font-weight: 700; display: none;
+        }
+
+        .result-banner.win      { background: #14532d; color: #86efac; border: 1px solid #16a34a; }
+        .result-banner.blackjack{ background: #78350f; color: #fde68a; border: 1px solid #d97706; }
+        .result-banner.push     { background: #374151; color: #d1d5db; border: 1px solid #4b5563; }
+        .result-banner.lose     { background: #450a0a; color: #fca5a5; border: 1px solid #dc2626; }
+        .result-banner.bust     { background: #450a0a; color: #fca5a5; border: 1px solid #dc2626; }
+
+        .lobby-row {
+            display: flex; justify-content: space-between;
+            padding: 6px 0; border-top: 1px solid #1e293b;
+        }
+
+        .lobby-row:first-child { border-top: none; }
+
+        #toasts {
+            position: fixed; right: 12px; top: 12px;
+            display: flex; flex-direction: column; gap: 6px;
+            z-index: 1000; pointer-events: none;
+        }
+
+        .toast {
+            min-width: 160px; max-width: 280px; padding: 8px 12px;
+            border-radius: 8px; background: #172033; border: 1px solid var(--line);
+            color: var(--text); font-weight: 700; font-size: 0.9rem;
+            box-shadow: 0 4px 14px rgba(0,0,0,.5);
+            opacity: 0; transform: translateY(-6px);
+            transition: opacity 220ms ease, transform 220ms ease;
+        }
+
+        .toast.show { opacity: 1; transform: translateY(0); }
+
+        @media (max-width: 480px) { .actions { flex-direction: column; } }
+    </style>
+</head>
+<body>
+
+    <section id="join-screen" class="screen active card">
+        <h1>Join Blackjack</h1>
+        <div class="muted">100 chips bet per round. Nickname not saved.</div>
+        <input id="input-nickname" maxlength="20" placeholder="Enter nickname">
+        <button id="btn-join" class="primary join-btn">Join</button>
+        <div id="join-error" class="error"></div>
+    </section>
+
+    <section id="lobby-screen" class="screen card">
+        <h2>Lobby</h2>
+        <div id="my-badge" class="status"></div>
+        <div class="section" style="margin-top:10px;">
+            <div class="section-title">Players</div>
+            <div id="lobby-list"></div>
+        </div>
+        <div class="muted" style="margin-top:8px;">Waiting for host to start the round...</div>
+    </section>
+
+    <section id="game-screen" class="screen card">
+        <h2>Blackjack</h2>
+        <div id="status" class="status">Waiting...</div>
+        <div id="turn-indicator" class="turn-indicator">Waiting...</div>
+
+        <div id="result-banner" class="result-banner"></div>
+
+        <div class="section">
+            <div class="section-title">Dealer</div>
+            <div class="cards-strip" id="dealer-cards"><span class="muted">No cards yet</span></div>
+            <div id="dealer-val" style="margin-top:6px;color:var(--muted);font-size:.88rem;"></div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">My Hand</div>
+            <div class="cards-strip" id="my-cards"><span class="muted">Waiting for deal...</span></div>
+            <div id="my-val" class="hand-value"></div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Table</div>
+            <div id="seats"></div>
+        </div>
+
+        <div id="actions" class="actions" style="display:none;">
+            <button id="btn-hit"    class="primary">Hit</button>
+            <button id="btn-stand"  class="secondary">Stand</button>
+            <button id="btn-double" class="gold-btn" disabled>Double</button>
+        </div>
+    </section>
+
+    <div id="toasts"></div>
+
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script>
+        const socket = io();
+
+        const screens = {
+            join:  document.getElementById('join-screen'),
+            lobby: document.getElementById('lobby-screen'),
+            game:  document.getElementById('game-screen'),
+        };
+
+        const inputNickname  = document.getElementById('input-nickname');
+        const btnJoin        = document.getElementById('btn-join');
+        const joinError      = document.getElementById('join-error');
+        const myBadge        = document.getElementById('my-badge');
+        const lobbyList      = document.getElementById('lobby-list');
+        const statusEl       = document.getElementById('status');
+        const turnEl         = document.getElementById('turn-indicator');
+        const resultBanner   = document.getElementById('result-banner');
+        const dealerCardsEl  = document.getElementById('dealer-cards');
+        const dealerValEl    = document.getElementById('dealer-val');
+        const myCardsEl      = document.getElementById('my-cards');
+        const myValEl        = document.getElementById('my-val');
+        const seatsEl        = document.getElementById('seats');
+        const actionsEl      = document.getElementById('actions');
+        const btnHit         = document.getElementById('btn-hit');
+        const btnStand       = document.getElementById('btn-stand');
+        const btnDouble      = document.getElementById('btn-double');
+        const toastsEl       = document.getElementById('toasts');
+
+        const BJ_SESSION_KEY = 'royaltest.prototype.bj.playerSessionId';
+
+        let myNickname = '';
+        let myChips    = 1000;
+        let isMyTurn   = false;
+        let reconnectProbeSent = false;
+        const playerSessionId = getOrCreateSessionId();
+
+        function esc(v) {
+            const d = document.createElement('div');
+            d.textContent = String(v);
+            return d.innerHTML;
+        }
+
+        function fmt(n) { return Number(n || 0).toLocaleString(); }
+
+        function showScreen(name) {
+            Object.values(screens).forEach((el) => el.classList.remove('active'));
+            screens[name].classList.add('active');
+        }
+
+        function getOrCreateSessionId() {
+            try {
+                let id = localStorage.getItem(BJ_SESSION_KEY);
+                if (!id) {
+                    id = `bj-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+                    localStorage.setItem(BJ_SESSION_KEY, id);
+                }
+                return id;
+            } catch (_) {
+                return `bj-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+            }
+        }
+
+        function cardMarkup(card) {
+            if (!card) return '';
+            if (card.rank === '?') {
+                return '<div class="mini-card hidden"><span class="rank">?</span></div>';
+            }
+            const isRed = card.suit === '♥' || card.suit === '♦';
+            return `<div class="mini-card${isRed ? ' red' : ''}"><span class="rank">${esc(card.rank)}</span><span class="suit">${esc(card.suit)}</span></div>`;
+        }
+
+        function setMyCards(cards, val) {
+            if (!cards || !cards.length) {
+                myCardsEl.innerHTML = '<span class="muted">Waiting for deal...</span>';
+                myValEl.textContent = '';
+                return;
+            }
+            myCardsEl.innerHTML = cards.map(cardMarkup).join('');
+            let cls = 'good';
+            if (val > 21) cls = 'bust';
+            else if (val === 21) cls = 'bj';
+            myValEl.className = `hand-value ${cls}`;
+            myValEl.textContent = val === 21 ? '21 — Blackjack!' : `${val}${val > 21 ? ' — Bust' : ''}`;
+        }
+
+        function setTurn(mine, currentPlayer) {
+            isMyTurn = mine;
+            if (mine) {
+                turnEl.textContent = 'YOUR TURN — Choose an action';
+                turnEl.classList.add('active');
+                actionsEl.style.display = 'flex';
+            } else {
+                turnEl.classList.remove('active');
+                actionsEl.style.display = 'none';
+                turnEl.textContent = currentPlayer
+                    ? `Waiting for ${currentPlayer}...`
+                    : 'Waiting...';
+            }
+        }
+
+        function showResult(result) {
+            const labels = {
+                win: '+ 200 — You Win!', blackjack: '+ 250 — Blackjack!',
+                push: 'Push — Tie', lose: '− 100 — You Lose', bust: '− 100 — Bust',
+            };
+            resultBanner.textContent = labels[result] || result;
+            resultBanner.className = `result-banner ${result}`;
+            resultBanner.style.display = 'block';
+        }
+
+        function showToast(msg, color) {
+            const div = document.createElement('div');
+            div.className = 'toast';
+            div.textContent = msg;
+            if (color) div.style.borderColor = color;
+            toastsEl.appendChild(div);
+            requestAnimationFrame(() => div.classList.add('show'));
+            while (toastsEl.children.length > 5) toastsEl.removeChild(toastsEl.firstChild);
+            setTimeout(() => { div.classList.remove('show'); setTimeout(() => div.remove(), 260); }, 3500);
+        }
+
+        function tryJoin() {
+            const nickname = inputNickname.value.trim();
+            if (!nickname) { joinError.textContent = 'Please enter a nickname.'; return; }
+            joinError.textContent = '';
+            socket.emit('bj_join_game', { nickname, session_id: playerSessionId });
+        }
+
+        function tryReconnect() {
+            if (reconnectProbeSent) return;
+            reconnectProbeSent = true;
+            socket.emit('bj_join_game', { session_id: playerSessionId });
+        }
+
+        function sendAction(action) {
+            socket.emit('bj_player_action', { action });
+            actionsEl.style.display = 'none';
+            statusEl.textContent = `Sent: ${action}`;
+        }
+
+        btnJoin.addEventListener('click', tryJoin);
+        inputNickname.addEventListener('keydown', (e) => { if (e.key === 'Enter') tryJoin(); });
+        btnHit.addEventListener('click', () => sendAction('hit'));
+        btnStand.addEventListener('click', () => sendAction('stand'));
+        btnDouble.addEventListener('click', () => sendAction('double'));
+
+        socket.on('connect', () => {
+            if (!myNickname) tryReconnect();
+        });
+
+        socket.on('bj_join_error', (data) => {
+            const msg = (data && data.message) || 'Join failed.';
+            if (reconnectProbeSent && !myNickname && msg === 'Nickname cannot be empty.') return;
+            joinError.textContent = msg;
+            showScreen('join');
+        });
+
+        socket.on('bj_join_success', (data) => {
+            myNickname = data.nickname;
+            myChips    = data.chips;
+            myBadge.innerHTML = `<strong>${esc(data.nickname)}</strong> · ${fmt(data.chips)} chips`;
+            showScreen('lobby');
+        });
+
+        socket.on('bj_lobby_update', (players) => {
+            if (!players.length) {
+                lobbyList.innerHTML = '<div class="muted">No players yet</div>';
+                return;
+            }
+            lobbyList.innerHTML = players.map((p) =>
+                `<div class="lobby-row"><span>${esc(p.nickname)}${p.nickname === myNickname ? ' <span class="muted">(you)</span>' : ''}</span><span style="color:var(--accent)">${fmt(p.chips)}</span></div>`
+            ).join('');
+        });
+
+        socket.on('bj_round_starting', () => {
+            showScreen('game');
+            statusEl.textContent = 'Round starting...';
+            resultBanner.style.display = 'none';
+            actionsEl.style.display = 'none';
+            setTurn(false, null);
+        });
+
+        socket.on('bj_game_state', (state) => {
+            // Dealer
+            const dc = state.dealer_cards || [];
+            if (!dc.length) {
+                dealerCardsEl.innerHTML = '<span class="muted">No cards yet</span>';
+                dealerValEl.textContent = '';
+            } else {
+                dealerCardsEl.innerHTML = dc.map(cardMarkup).join('');
+                dealerValEl.textContent = `Showing: ${state.dealer_value}${
+                    state.state === 'round_over' && state.dealer_value > 21 ? ' — BUST' : ''}`;
+            }
+
+            // My hand
+            const me = (state.players || []).find((p) => p.nickname === myNickname);
+            if (me) {
+                myChips = me.chips;
+                myBadge.innerHTML = `<strong>${esc(myNickname)}</strong> · ${fmt(myChips)} chips`;
+                setMyCards(me.cards, me.hand_value);
+            }
+
+            // Turn state (when not my turn, bj_your_turn hasn't fired yet)
+            if (state.state !== 'round_over') {
+                const myTurn = state.current_player === myNickname;
+                if (!myTurn) setTurn(false, state.current_player);
+                if (state.current_player) {
+                    statusEl.textContent = myTurn ? 'Your turn!' : `Waiting for ${state.current_player}...`;
+                }
+            } else {
+                setTurn(false, null);
+                statusEl.textContent = 'Round over. Waiting for host to start next round...';
+            }
+
+            // Seats
+            const players = state.players || [];
+            if (!players.length) {
+                seatsEl.innerHTML = '<div class="muted">No players.</div>';
+                return;
+            }
+            seatsEl.innerHTML = players.map((p) => {
+                const statusMap = {
+                    playing: 'pill-playing', standing: 'pill-standing',
+                    bust: 'pill-bust', blackjack: 'pill-blackjack', sitting_out: 'pill-sitting',
+                };
+                const pills = [];
+                if (p.is_current) pills.push('<span class="pill" style="background:rgba(52,211,153,.2);color:#6ee7b7;border:1px solid rgba(52,211,153,.4)">TURN</span>');
+                else if (p.status) pills.push(`<span class="pill ${statusMap[p.status] || ''}">${esc(p.status.replace('_',' ').toUpperCase())}</span>`);
+                if (p.is_connected === false) pills.push('<span class="pill pill-sitting">OFFLINE</span>');
+                const betTag = p.bet > 0 ? `<span style="font-size:.75rem;color:var(--gold)">bet ${fmt(p.bet)}${p.doubled?' (2x)':''}</span>` : '';
+                const valTag = p.cards && p.cards.length ? `<span style="font-size:.8rem;color:var(--muted)">${p.hand_value}</span>` : '';
+                return `
+                <div class="seat${p.is_current ? ' current' : ''}">
+                    <div>
+                        <span class="name">${esc(p.nickname)}${p.nickname === myNickname ? ' <span class="muted">(you)</span>' : ''}</span>
+                        <div style="display:flex;gap:6px;align-items:center;margin-top:4px;flex-wrap:wrap">
+                            ${pills.join('')} ${valTag} ${betTag}
+                        </div>
+                    </div>
+                    <div class="seat-right">
+                        <span class="chips-val">${fmt(p.chips)} chips</span>
+                    </div>
+                </div>`;
+            }).join('');
+        });
+
+        socket.on('bj_your_turn', (data) => {
+            setTurn(true, null);
+            statusEl.textContent = 'Your turn!';
+            btnDouble.disabled = !data.can_double;
+            const val = data.hand_value || 0;
+            if (val >= 19) showToast(`You have ${val} — consider standing!`, '#34d399');
+        });
+
+        socket.on('bj_round_over', (data) => {
+            setTurn(false, null);
+            const results = data.results || {};
+            const myResult = results[myNickname];
+            if (myResult) showResult(myResult);
+
+            const parts = Object.entries(results).map(([n, r]) => `${n}: ${r}`);
+            showToast('Round over! ' + parts.join(' · '), '#34d399');
+        });
+
+        socket.on('bj_game_finished', (data) => {
+            statusEl.textContent = data.message || 'Game finished.';
+            setTurn(false, null);
+            resultBanner.style.display = 'none';
+            showScreen('lobby');
+            showToast(data.message || 'Game finished.', '#60a5fa');
+        });
+    </script>
+</body>
+</html>
