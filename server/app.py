@@ -10,7 +10,9 @@ from flask_socketio import SocketIO, emit
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import random
+import sqlite3
 import string
+import time
 
 from blackjack_engine import BlackjackGame, hand_value as bj_hand_value
 from bot_player import BotPlayer, HumanPlayer
@@ -18,6 +20,7 @@ from game_engine import Game
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PUBLIC_DIR = os.path.join(BASE_DIR, 'public')
+DB_PATH = os.path.join(BASE_DIR, 'royalsync.db')
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('ROYALTEST_PROTOTYPE_SECRET', 'royaltest-prototype-secret')
@@ -32,6 +35,72 @@ current_game = None
 session_to_player = {}
 game_active = False
 join_queue = []
+
+
+def _db_init():
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS players (
+                session_id TEXT PRIMARY KEY,
+                nickname   TEXT NOT NULL,
+                chips      INTEGER NOT NULL DEFAULT 1000,
+                game       TEXT NOT NULL DEFAULT 'poker',
+                last_seen  REAL NOT NULL DEFAULT 0
+            )
+        ''')
+        conn.commit()
+
+
+def _db_upsert_player(session_id: str, nickname: str, chips: int, game: str):
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute('''
+            INSERT INTO players (session_id, nickname, chips, game, last_seen)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(session_id) DO UPDATE SET
+                nickname  = excluded.nickname,
+                chips     = excluded.chips,
+                game      = excluded.game,
+                last_seen = excluded.last_seen
+        ''', (session_id, nickname, chips, game, time.time()))
+        conn.commit()
+
+
+def _db_update_chips_bulk(updates):
+    """updates: list of (chips, session_id)"""
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.executemany('UPDATE players SET chips = ? WHERE session_id = ?', updates)
+        conn.commit()
+
+
+def _db_reset_chips(game: str, amount: int = 1000):
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute('UPDATE players SET chips = ? WHERE game = ?', (amount, game))
+        conn.commit()
+
+
+def _db_load_all():
+    """Restore persisted players into in-memory dicts on startup."""
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute('SELECT session_id, nickname, chips, game FROM players').fetchall()
+    except Exception as exc:
+        print(f'[db] load failed: {exc}')
+        return
+    for row in rows:
+        entry = {
+            'session_id': row['session_id'],
+            'nickname': row['nickname'],
+            'chips': row['chips'],
+            'sid': None,
+            'is_connected': False,
+            'state': 'lobby',
+        }
+        if row['game'] == 'blackjack':
+            bj_session_players[row['session_id']] = entry
+        else:
+            session_players[row['session_id']] = entry
+    print(f'[db] loaded {len(rows)} player(s) from {DB_PATH}')
 
 
 def _lobby_players():
@@ -166,6 +235,29 @@ def on_join_game(data):
         return
 
     existing = session_players.get(session_id)
+
+    # Restore from DB if the server restarted and wiped in-memory state.
+    if not existing:
+        try:
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                row = conn.execute(
+                    "SELECT nickname, chips FROM players WHERE session_id = ? AND game = 'poker'",
+                    (session_id,),
+                ).fetchone()
+        except Exception:
+            row = None
+        if row:
+            session_players[session_id] = {
+                'session_id': session_id,
+                'nickname': row['nickname'],
+                'chips': row['chips'],
+                'sid': None,
+                'is_connected': False,
+                'state': 'lobby',
+            }
+            existing = session_players[session_id]
+
     if existing:
         _attach_session_to_sid(session_id, _request_sid())
         _sync_player_connection(session_id)
@@ -199,6 +291,7 @@ def on_join_game(data):
         'is_connected': False,
         'state': 'lobby',
     }
+    _db_upsert_player(session_id, nickname, 1000, 'poker')
     _attach_session_to_sid(session_id, _request_sid())
 
     if game_active:
@@ -330,6 +423,7 @@ def on_restart_game():
     socketio.emit('game_finished', {'winner': None, 'restarted': True})
     for info in session_players.values():
         info['chips'] = 1000
+    _db_reset_chips('poker', 1000)
     _end_game_session()
 
 
@@ -655,10 +749,14 @@ def _sync_player_connection(session_id: str):
 
 
 def _sync_all_game_player_chips():
+    updates = []
     for session_id, player in session_to_player.items():
         info = session_players.get(session_id)
         if info:
             info['chips'] = player.chips
+            updates.append((player.chips, session_id))
+    if updates:
+        _db_update_chips_bulk(updates)
 
 
 def _emit_session_state(session_id: str):
@@ -762,6 +860,28 @@ def on_bj_join_game(data):
         return
 
     existing = bj_session_players.get(session_id)
+
+    if not existing:
+        try:
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                row = conn.execute(
+                    "SELECT nickname, chips FROM players WHERE session_id = ? AND game = 'blackjack'",
+                    (session_id,),
+                ).fetchone()
+        except Exception:
+            row = None
+        if row:
+            bj_session_players[session_id] = {
+                'session_id': session_id,
+                'nickname': row['nickname'],
+                'chips': row['chips'],
+                'sid': None,
+                'is_connected': False,
+                'state': 'lobby',
+            }
+            existing = bj_session_players[session_id]
+
     if existing:
         _bj_attach_session(session_id, _request_sid())
         _bj_sync_player_connection(session_id)
@@ -797,6 +917,7 @@ def on_bj_join_game(data):
         'session_id': session_id, 'nickname': nickname, 'chips': 1000,
         'sid': None, 'is_connected': False, 'state': 'lobby',
     }
+    _db_upsert_player(session_id, nickname, 1000, 'blackjack')
     _bj_attach_session(session_id, _request_sid())
     emit('bj_join_success', {'nickname': nickname, 'chips': 1000})
     _bj_broadcast_lobby()
@@ -833,7 +954,10 @@ def on_bj_start_round():
     socketio.emit('bj_round_starting', {})
     _bj_broadcast_lobby()
     _bj_broadcast_state()
-    _bj_process_auto_turns()
+    if bj_current_game.state == 'round_over':
+        _bj_emit_round_over()
+    else:
+        _bj_process_auto_turns()
 
 
 @socketio.on('bj_player_action')
@@ -866,15 +990,29 @@ def on_bj_next_round():
 
     socketio.emit('bj_round_starting', {})
     _bj_broadcast_state()
-    _bj_process_auto_turns()
+    if bj_current_game.state == 'round_over':
+        _bj_emit_round_over()
+    else:
+        _bj_process_auto_turns()
 
 
 @socketio.on('bj_restart_game')
 def on_bj_restart_game():
     for info in bj_session_players.values():
         info['chips'] = 1000
+    _db_reset_chips('blackjack', 1000)
     socketio.emit('bj_game_finished', {'message': 'Game restarted. Chips reset to 1000.'})
     _bj_end_session()
+
+
+def _bj_emit_round_over():
+    if not bj_current_game:
+        return
+    results_by_name = {
+        p.nickname: bj_current_game.results.get(p.session_id)
+        for p in bj_current_game.players
+    }
+    socketio.emit('bj_round_over', {'results': results_by_name})
 
 
 def _bj_apply_action(session_id, action):
@@ -886,11 +1024,7 @@ def _bj_apply_action(session_id, action):
     _bj_broadcast_state()
 
     if event == 'round_over':
-        results_by_name = {
-            p.nickname: bj_current_game.results.get(p.session_id)
-            for p in bj_current_game.players
-        }
-        socketio.emit('bj_round_over', {'results': results_by_name})
+        _bj_emit_round_over()
     elif event == 'continue':
         _bj_process_auto_turns()
 
@@ -905,11 +1039,7 @@ def _bj_process_auto_turns():
             _bj_sync_chips()
             _bj_broadcast_state()
             if event == 'round_over':
-                results_by_name = {
-                    p.nickname: bj_current_game.results.get(p.session_id)
-                    for p in bj_current_game.players
-                }
-                socketio.emit('bj_round_over', {'results': results_by_name})
+                _bj_emit_round_over()
                 return
             continue
         _bj_notify_current_player()
@@ -965,10 +1095,14 @@ def _bj_sync_player_connection(session_id):
 
 
 def _bj_sync_chips():
+    updates = []
     for session_id, player in bj_session_to_player.items():
         info = bj_session_players.get(session_id)
         if info:
             info['chips'] = player.chips
+            updates.append((player.chips, session_id))
+    if updates:
+        _db_update_chips_bulk(updates)
 
 
 def _bj_end_session():
@@ -981,6 +1115,9 @@ def _bj_end_session():
     _bj_broadcast_lobby()
 
 
+_db_init()
+_db_load_all()
+
 if __name__ == '__main__':
     bind_host = os.getenv('ROYALTEST_PROTOTYPE_HOST', '0.0.0.0')
     port = int(os.getenv('ROYALTEST_PROTOTYPE_PORT', '5050'))
@@ -990,4 +1127,4 @@ if __name__ == '__main__':
     print(f'  Prototype host page : http://localhost:{port}/host')
     print(f'  Prototype player URL: http://{local_ip}:{port}/join')
     print()
-    socketio.run(app, host=bind_host, port=port, debug=debug)
+    socketio.run(app, host=bind_host, port=port, debug=debug, allow_unsafe_werkzeug=True)
