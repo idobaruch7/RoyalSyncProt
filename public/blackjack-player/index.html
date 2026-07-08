@@ -6,11 +6,11 @@
     <title>Blackjack Player</title>
     <style>
         :root {
-            --bg: #111827;
-            --panel: #1f2937;
-            --line: #374151;
-            --text: #f9fafb;
-            --muted: #9ca3af;
+            --bg: #0a1f14;
+            --panel: #10291b;
+            --line: #1e4d33;
+            --text: #f1f5f2;
+            --muted: #9fb3a6;
             --accent: #34d399;
             --warn: #f59e0b;
             --danger: #f87171;
@@ -25,7 +25,7 @@
             min-height: 100vh;
             font-family: Arial, sans-serif;
             color: var(--text);
-            background: radial-gradient(circle at top, #1f2937 0%, var(--bg) 55%);
+            background: radial-gradient(circle at top, #12331f 0%, var(--bg) 55%);
             padding: 14px;
         }
 
@@ -51,7 +51,7 @@
         input {
             width: 100%; margin-top: 10px; padding: 11px;
             border-radius: 8px; border: 1px solid var(--line);
-            background: #0f172a; color: var(--text); font-size: 1rem;
+            background: #081a11; color: var(--text); font-size: 1rem;
         }
 
         button {
@@ -71,13 +71,13 @@
 
         .status {
             margin-top: 10px; border-radius: 8px;
-            border: 1px solid var(--line); background: #0f172a;
+            border: 1px solid var(--line); background: #081a11;
             padding: 10px; min-height: 42px;
         }
 
         .turn-indicator {
             margin-top: 10px; border-radius: 8px;
-            border: 1px solid #334155; background: #172033;
+            border: 1px solid var(--line); background: #10291b;
             color: #cbd5e1; font-weight: 700; text-align: center; padding: 10px;
         }
 
@@ -94,7 +94,7 @@
 
         .section {
             margin-top: 10px; border: 1px solid var(--line);
-            border-radius: 8px; background: #0f172a; padding: 10px;
+            border-radius: 8px; background: #081a11; padding: 10px;
         }
 
         .section-title {
@@ -138,7 +138,7 @@
 
         .seat {
             display: flex; justify-content: space-between; align-items: center;
-            padding: 8px; border-top: 1px solid #1e293b; gap: 8px;
+            padding: 8px; border-top: 1px solid #1c3d2a; gap: 8px;
         }
 
         .seat:first-child { border-top: none; }
@@ -175,7 +175,7 @@
 
         .lobby-row {
             display: flex; justify-content: space-between;
-            padding: 6px 0; border-top: 1px solid #1e293b;
+            padding: 6px 0; border-top: 1px solid #1c3d2a;
         }
 
         .lobby-row:first-child { border-top: none; }
@@ -188,7 +188,7 @@
 
         .toast {
             min-width: 160px; max-width: 280px; padding: 8px 12px;
-            border-radius: 8px; background: #172033; border: 1px solid var(--line);
+            border-radius: 8px; background: #10291b; border: 1px solid var(--line);
             color: var(--text); font-weight: 700; font-size: 0.9rem;
             box-shadow: 0 4px 14px rgba(0,0,0,.5);
             opacity: 0; transform: translateY(-6px);
@@ -208,6 +208,12 @@
         <input id="input-nickname" maxlength="20" placeholder="Enter nickname">
         <button id="btn-join" class="primary join-btn">Join</button>
         <div id="join-error" class="error"></div>
+    </section>
+
+    <section id="queue-screen" class="screen card">
+        <h2>Queued</h2>
+        <div class="muted">Round in progress. You will join the next round.</div>
+        <div id="queue-name" class="status"></div>
     </section>
 
     <section id="lobby-screen" class="screen card">
@@ -259,6 +265,7 @@
 
         const screens = {
             join:  document.getElementById('join-screen'),
+            queue: document.getElementById('queue-screen'),
             lobby: document.getElementById('lobby-screen'),
             game:  document.getElementById('game-screen'),
         };
@@ -266,6 +273,7 @@
         const inputNickname  = document.getElementById('input-nickname');
         const btnJoin        = document.getElementById('btn-join');
         const joinError      = document.getElementById('join-error');
+        const queueName      = document.getElementById('queue-name');
         const myBadge        = document.getElementById('my-badge');
         const lobbyList      = document.getElementById('lobby-list');
         const statusEl       = document.getElementById('status');
@@ -418,6 +426,13 @@
             showScreen('lobby');
         });
 
+        socket.on('bj_join_queued', (data) => {
+            myNickname = data.nickname;
+            myChips    = data.chips;
+            queueName.textContent = `${data.nickname} · ${fmt(data.chips)} chips`;
+            showScreen('queue');
+        });
+
         socket.on('bj_lobby_update', (players) => {
             if (!players.length) {
                 lobbyList.innerHTML = '<div class="muted">No players yet</div>';
@@ -445,7 +460,7 @@
             } else {
                 dealerCardsEl.innerHTML = dc.map(cardMarkup).join('');
                 dealerValEl.textContent = `Showing: ${state.dealer_value}${
-                    state.state === 'round_over' && state.dealer_value > 21 ? ' - BUST' : ''}`;
+                    (state.state === 'round_over' || state.state === 'dealer_turn') && state.dealer_value > 21 ? ' - BUST' : ''}`;
             }
 
             // My hand
@@ -457,15 +472,18 @@
             }
 
             // Turn state (when not my turn, bj_your_turn hasn't fired yet)
-            if (state.state !== 'round_over') {
+            if (state.state === 'round_over') {
+                setTurn(false, null);
+                statusEl.textContent = 'Round over. Waiting for host to start next round...';
+            } else if (state.state === 'dealer_turn') {
+                setTurn(false, null);
+                statusEl.textContent = 'Dealer is playing...';
+            } else {
                 const myTurn = state.current_player === myNickname;
                 if (!myTurn) setTurn(false, state.current_player);
                 if (state.current_player) {
                     statusEl.textContent = myTurn ? 'Your turn!' : `Waiting for ${state.current_player}...`;
                 }
-            } else {
-                setTurn(false, null);
-                statusEl.textContent = 'Round over. Waiting for host to start next round...';
             }
 
             // Seats

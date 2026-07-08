@@ -28,7 +28,7 @@ class BlackjackGame:
         self.players = list(players)
         self.deck = Deck()
         self.dealer_hand = []
-        self.dealer_hidden = True
+        self.dealer_revealed = 0  # number of dealer cards (from the front) shown face-up
         self.player_states = {}  # session_id -> {cards, status, bet, doubled}
         self.state = 'waiting'
         self.to_act = []         # session_ids of players who still need to act
@@ -37,7 +37,7 @@ class BlackjackGame:
     def start_round(self):
         self.deck = Deck()
         self.dealer_hand = self.deck.deal(2)
-        self.dealer_hidden = True
+        self.dealer_revealed = 1  # up-card visible, hole card face-down
         self.player_states = {}
         self.results = {}
         active = []
@@ -61,7 +61,7 @@ class BlackjackGame:
         self.state = 'player_turns'
 
         if not self.to_act:
-            self._dealer_play()
+            self.state = 'dealer_turn'
 
         return self._current_player()
 
@@ -112,15 +112,28 @@ class BlackjackGame:
             return 'invalid'
 
         if not self.to_act:
-            self._dealer_play()
-            return 'round_over'
+            self.state = 'dealer_turn'
+            return 'dealer_turn'
 
         return 'continue'
 
-    def _dealer_play(self):
-        self.dealer_hidden = False
-        while hand_value(self.dealer_hand) < 17:
-            self.dealer_hand.extend(self.deck.deal(1))
+    def dealer_reveal(self):
+        """Flip the hole card face-up."""
+        self.dealer_revealed = len(self.dealer_hand)
+
+    def dealer_needs_hit(self) -> bool:
+        return hand_value(self.dealer_hand[:self.dealer_revealed]) < 17
+
+    def dealer_hit(self):
+        """Deal the next dealer card face-down; call dealer_reveal_next() to flip it."""
+        self.dealer_hand.extend(self.deck.deal(1))
+
+    def dealer_reveal_next(self):
+        """Flip the most recently dealt face-down card face-up."""
+        if self.dealer_revealed < len(self.dealer_hand):
+            self.dealer_revealed += 1
+
+    def finish_round(self):
         self._resolve()
         self.state = 'round_over'
 
@@ -153,12 +166,11 @@ class BlackjackGame:
                     self.results[p.session_id] = 'lose'
 
     def to_dict(self):
-        if self.dealer_hidden and self.dealer_hand:
-            dealer_display = [self.dealer_hand[0].to_dict(), {'rank': '?', 'suit': '?'}]
-            dealer_val = _BJ_VAL.get(self.dealer_hand[0].rank, 10)
-        else:
-            dealer_display = [c.to_dict() for c in self.dealer_hand]
-            dealer_val = hand_value(self.dealer_hand) if self.dealer_hand else 0
+        dealer_display = [
+            c.to_dict() if i < self.dealer_revealed else {'rank': '?', 'suit': '?'}
+            for i, c in enumerate(self.dealer_hand)
+        ]
+        dealer_val = hand_value(self.dealer_hand[:self.dealer_revealed]) if self.dealer_revealed else 0
 
         current = self._current_player()
         players_out = []
