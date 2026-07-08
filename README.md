@@ -58,14 +58,14 @@ See `docs/ARCHITECTURE.md` for the full picture.
 
 ## Optional environment variables
 
-- `ROYALTEST_PROTOTYPE_PORT` (default `5050`)
-- `ROYALTEST_PROTOTYPE_HOST` (default `0.0.0.0`)
-- `ROYALTEST_PROTOTYPE_DEBUG` (`1`/`0`, default `0`)
-- `ROYALTEST_PROTOTYPE_SECRET` — Flask session secret. Has a hard-coded default for local use; **set this to something random if you ever expose the server beyond localhost**.
+- `ROYALSYNC_PORT` (default `5050`)
+- `ROYALSYNC_HOST` (default `0.0.0.0`)
+- `ROYALSYNC_DEBUG` (`1`/`0`, default `0`)
+- `ROYALSYNC_SECRET` - Flask session secret. Has a hard-coded default for local use; **set this to something random if you ever expose the server beyond localhost**.
 
 ## Scope / non-goals
 
-- In-memory only — restarting the server wipes everything.
+- In-memory only - restarting the server wipes everything.
 - One global table, ever.
 - No host authentication: any client can hit `start_game` / `restart_game` / `add_bot`. Fine for a demo on a trusted network.
 - Blinds are fixed at 10/20; no escalation, no antes.

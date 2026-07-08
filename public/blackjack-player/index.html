@@ -282,7 +282,7 @@
         const btnDouble      = document.getElementById('btn-double');
         const toastsEl       = document.getElementById('toasts');
 
-        const BJ_SESSION_KEY = 'royaltest.prototype.bj.playerSessionId';
+        const BJ_SESSION_KEY = 'royalsync.bj.playerSessionId';
 
         let myNickname = '';
         let myChips    = 1000;
@@ -336,13 +336,13 @@
             if (val > 21) cls = 'bust';
             else if (val === 21) cls = 'bj';
             myValEl.className = `hand-value ${cls}`;
-            myValEl.textContent = val === 21 ? '21 — Blackjack!' : `${val}${val > 21 ? ' — Bust' : ''}`;
+            myValEl.textContent = val === 21 ? '21 - Blackjack!' : `${val}${val > 21 ? ' - Bust' : ''}`;
         }
 
         function setTurn(mine, currentPlayer) {
             isMyTurn = mine;
             if (mine) {
-                turnEl.textContent = 'YOUR TURN — Choose an action';
+                turnEl.textContent = 'YOUR TURN - Choose an action';
                 turnEl.classList.add('active');
                 actionsEl.style.display = 'flex';
             } else {
@@ -356,8 +356,8 @@
 
         function showResult(result) {
             const labels = {
-                win: '+ 200 — You Win!', blackjack: '+ 250 — Blackjack!',
-                push: 'Push — Tie', lose: '− 100 — You Lose', bust: '− 100 — Bust',
+                win: '+ 200 - You Win!', blackjack: '+ 250 - Blackjack!',
+                push: 'Tie', lose: '− 100 - You Lose', bust: '− 100 - Bust',
             };
             resultBanner.textContent = labels[result] || result;
             resultBanner.className = `result-banner ${result}`;
@@ -445,7 +445,7 @@
             } else {
                 dealerCardsEl.innerHTML = dc.map(cardMarkup).join('');
                 dealerValEl.textContent = `Showing: ${state.dealer_value}${
-                    state.state === 'round_over' && state.dealer_value > 21 ? ' — BUST' : ''}`;
+                    state.state === 'round_over' && state.dealer_value > 21 ? ' - BUST' : ''}`;
             }
 
             // My hand
@@ -505,7 +505,7 @@
             statusEl.textContent = 'Your turn!';
             btnDouble.disabled = !data.can_double;
             const val = data.hand_value || 0;
-            if (val >= 19) showToast(`You have ${val} — consider standing!`, '#34d399');
+            if (val >= 19) showToast(`You have ${val} - consider standing!`, '#34d399');
         });
 
         socket.on('bj_round_over', (data) => {

@@ -22,12 +22,15 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PUBLIC_DIR = os.path.join(BASE_DIR, 'public')
 DB_PATH = os.path.join(BASE_DIR, 'royalsync.db')
 
+# Disabled for now: state lives only in memory and resets on restart.
+DB_ENABLED = False
+
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.getenv('ROYALTEST_PROTOTYPE_SECRET', 'royaltest-prototype-secret')
+app.config['SECRET_KEY'] = os.getenv('ROYALSYNC_SECRET', 'royalsync-dev-secret')
 socketio = SocketIO(app, cors_allowed_origins='*')
 
 
-# In-memory prototype state
+# In-memory game state
 MAX_PLAYERS = 8
 session_players = {}
 sid_to_session = {}
@@ -38,6 +41,8 @@ join_queue = []
 
 
 def _db_init():
+    if not DB_ENABLED:
+        return
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute('''
             CREATE TABLE IF NOT EXISTS players (
@@ -52,6 +57,8 @@ def _db_init():
 
 
 def _db_upsert_player(session_id: str, nickname: str, chips: int, game: str):
+    if not DB_ENABLED:
+        return
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute('''
             INSERT INTO players (session_id, nickname, chips, game, last_seen)
@@ -67,12 +74,16 @@ def _db_upsert_player(session_id: str, nickname: str, chips: int, game: str):
 
 def _db_update_chips_bulk(updates):
     """updates: list of (chips, session_id)"""
+    if not DB_ENABLED:
+        return
     with sqlite3.connect(DB_PATH) as conn:
         conn.executemany('UPDATE players SET chips = ? WHERE session_id = ?', updates)
         conn.commit()
 
 
 def _db_reset_chips(game: str, amount: int = 1000):
+    if not DB_ENABLED:
+        return
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute('UPDATE players SET chips = ? WHERE game = ?', (amount, game))
         conn.commit()
@@ -80,6 +91,8 @@ def _db_reset_chips(game: str, amount: int = 1000):
 
 def _db_load_all():
     """Restore persisted players into in-memory dicts on startup."""
+    if not DB_ENABLED:
+        return
     try:
         with sqlite3.connect(DB_PATH) as conn:
             conn.row_factory = sqlite3.Row
@@ -170,7 +183,7 @@ def public_files(filename):
 
 @socketio.on('connect')
 def on_connect():
-    print(f'[prototype][connect] {_request_sid()}')
+    print(f'[royalsync][connect] {_request_sid()}')
 
 
 @socketio.on('disconnect')
@@ -184,7 +197,7 @@ def on_disconnect():
         if info:
             info['sid'] = None
             info['is_connected'] = False
-            print(f'[prototype][disconnect] poker:{info["nickname"]}')
+            print(f'[royalsync][disconnect] poker:{info["nickname"]}')
             player = session_to_player.get(session_id)
             if player:
                 player.sid = None
@@ -237,7 +250,7 @@ def on_join_game(data):
     existing = session_players.get(session_id)
 
     # Restore from DB if the server restarted and wiped in-memory state.
-    if not existing:
+    if not existing and DB_ENABLED:
         try:
             with sqlite3.connect(DB_PATH) as conn:
                 conn.row_factory = sqlite3.Row
@@ -261,7 +274,7 @@ def on_join_game(data):
     if existing:
         _attach_session_to_sid(session_id, _request_sid())
         _sync_player_connection(session_id)
-        print(f'[prototype][rejoin] {existing["nickname"]}')
+        print(f'[royalsync][rejoin] {existing["nickname"]}')
         _emit_session_state(session_id)
         _broadcast_lobby()
         _broadcast_queue()
@@ -301,7 +314,7 @@ def on_join_game(data):
         _broadcast_queue()
         return
 
-    print(f'[prototype][join] {nickname}')
+    print(f'[royalsync][join] {nickname}')
     emit('join_success', {'nickname': nickname, 'chips': 1000})
     _broadcast_lobby()
 
@@ -336,7 +349,7 @@ def on_add_bot(data):
         'personality': personality,
     }
 
-    print(f'[prototype][add_bot] {nickname}')
+    print(f'[royalsync][add_bot] {nickname}')
     _broadcast_lobby()
 
 
@@ -360,7 +373,7 @@ def on_remove_bot(data):
         return
 
     session_players.pop(target_id, None)
-    print(f'[prototype][remove_bot] {nickname}')
+    print(f'[royalsync][remove_bot] {nickname}')
     _broadcast_lobby()
 
 
@@ -397,7 +410,7 @@ def on_start_game():
     game_active = True
     current_game.start_hand()
 
-    print(f'[prototype][start_game] {len(players)} players')
+    print(f'[royalsync][start_game] {len(players)} players')
     socketio.emit('game_starting', {})
     _broadcast_lobby()
     _broadcast_game_state()
@@ -419,11 +432,21 @@ def on_restart_game():
     if not current_game and not game_active:
         return
 
-    print('[prototype][restart_game]')
+    print('[royalsync][restart_game]')
     socketio.emit('game_finished', {'winner': None, 'restarted': True})
     for info in session_players.values():
         info['chips'] = 1000
     _db_reset_chips('poker', 1000)
+    _end_game_session()
+
+
+@socketio.on('pause_game')
+def on_pause_game():
+    if not current_game and not game_active:
+        return
+
+    print('[royalsync][pause_game]')
+    socketio.emit('game_paused', {})
     _end_game_session()
 
 
@@ -861,7 +884,7 @@ def on_bj_join_game(data):
 
     existing = bj_session_players.get(session_id)
 
-    if not existing:
+    if not existing and DB_ENABLED:
         try:
             with sqlite3.connect(DB_PATH) as conn:
                 conn.row_factory = sqlite3.Row
@@ -1119,12 +1142,12 @@ _db_init()
 _db_load_all()
 
 if __name__ == '__main__':
-    bind_host = os.getenv('ROYALTEST_PROTOTYPE_HOST', '0.0.0.0')
-    port = int(os.getenv('ROYALTEST_PROTOTYPE_PORT', '5050'))
-    debug = os.getenv('ROYALTEST_PROTOTYPE_DEBUG', '0').lower() in {'1', 'true', 'yes', 'on'}
+    bind_host = os.getenv('ROYALSYNC_HOST', '0.0.0.0')
+    port = int(os.getenv('ROYALSYNC_PORT', '5050'))
+    debug = os.getenv('ROYALSYNC_DEBUG', '0').lower() in {'1', 'true', 'yes', 'on'}
     local_ip = _get_local_ip()
     print()
-    print(f'  Prototype host page : http://localhost:{port}/host')
-    print(f'  Prototype player URL: http://{local_ip}:{port}/join')
+    print(f'  Host page : http://localhost:{port}/host')
+    print(f'  Player URL: http://{local_ip}:{port}/join')
     print()
     socketio.run(app, host=bind_host, port=port, debug=debug, allow_unsafe_werkzeug=True)

@@ -1,5 +1,5 @@
 """
-game_engine.py — Prototype copy
+game_engine.py
 Core poker logic: deck, hand evaluation, full game loop.
 """
 import random

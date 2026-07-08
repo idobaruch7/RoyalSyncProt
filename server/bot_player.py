@@ -1,12 +1,12 @@
 """
-bot_player.py — Prototype copy
+bot_player.py
 Polymorphic player model: HumanPlayer waits for socket input,
 BotPlayer runs an instant decision algorithm.
 """
 
 
 class Player:
-    """Base player — holds shared state."""
+    """Base player - holds shared state."""
 
     def __init__(self, nickname: str, chips: int = 1000):
         self.nickname = nickname
@@ -43,7 +43,7 @@ class HumanPlayer(Player):
 
 
 class BotPlayer(Player):
-    """Base bot — available for future prototype extensions."""
+    """Base bot - available for future extensions."""
 
     def __init__(self, nickname: str, personality: str = 'calculator', chips: int = 1000):
         super().__init__(nickname, chips)
