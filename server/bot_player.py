@@ -63,17 +63,19 @@ class BotPlayer(Player):
 
     def _rock_strategy(self, strength: float, game_state: dict) -> dict:
         if strength > 0.7:
-            return self._aggressive_action(game_state, max(20, game_state.get('min_raise_total', 40)))
+            pot = game_state.get('pot', 0)
+            raise_size = max(game_state.get('min_raise', 20), pot // 2)
+            target = game_state.get('current_bet', 20) + raise_size
+            return self._aggressive_action(game_state, target)
         if strength > 0.4:
             return {'action': 'call', 'amount': 0}
         return {'action': 'fold', 'amount': 0}
 
     def _maniac_strategy(self, strength: float, game_state: dict) -> dict:
         if strength > 0.3:
-            target = max(
-                game_state.get('min_raise_total', 0),
-                game_state.get('current_bet', 20) + (2 * game_state.get('min_raise', 20)),
-            )
+            pot = game_state.get('pot', 0)
+            raise_size = max(2 * game_state.get('min_raise', 20), pot)
+            target = game_state.get('current_bet', 20) + raise_size
             return self._aggressive_action(game_state, target)
         return {'action': 'call', 'amount': 0}
 
@@ -83,10 +85,11 @@ class BotPlayer(Player):
         pot_odds = call_amount / (pot + call_amount) if (pot + call_amount) > 0 else 0
 
         if strength > pot_odds + 0.2:
-            target = max(
-                game_state.get('min_raise_total', 0),
-                game_state.get('current_bet', 20) + game_state.get('min_raise', 20),
-            )
+            # Size the raise to the strength/pot-odds edge, scaled by pot,
+            # so a stronger edge means a bigger bet - not just the table minimum.
+            edge = strength - pot_odds
+            raise_size = max(game_state.get('min_raise', 20), int(pot * min(edge * 2, 1.0)))
+            target = game_state.get('current_bet', 20) + raise_size
             return self._aggressive_action(game_state, target)
         if strength > pot_odds:
             return {'action': 'call', 'amount': call_amount}

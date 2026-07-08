@@ -181,6 +181,11 @@ def public_files(filename):
     return send_from_directory(PUBLIC_DIR, filename)
 
 
+@app.route('/api/network-info')
+def network_info():
+    return {'host': _get_local_ip(), 'port': request.host.split(':')[-1] if ':' in request.host else ''}
+
+
 @socketio.on('connect')
 def on_connect():
     print(f'[royalsync][connect] {_request_sid()}')
@@ -221,6 +226,7 @@ def on_disconnect():
                 player.sid = None
                 player.is_connected = False
             _bj_broadcast_lobby()
+            _bj_broadcast_queue()
             if bj_current_game:
                 _bj_process_auto_turns()
                 _bj_broadcast_state()
@@ -859,11 +865,13 @@ bj_sid_to_session = {}
 bj_current_game = None
 bj_session_to_player = {}
 bj_game_active = False
+bj_join_queue = []
 
 
 @socketio.on('bj_host_connected')
 def on_bj_host_connected():
     emit('bj_lobby_update', _bj_lobby_snapshot())
+    emit('bj_queue_update', _bj_queue_snapshot())
     if bj_current_game:
         emit('bj_round_starting', {})
         emit('bj_game_state', bj_current_game.to_dict())
@@ -908,17 +916,30 @@ def on_bj_join_game(data):
     if existing:
         _bj_attach_session(session_id, _request_sid())
         _bj_sync_player_connection(session_id)
-        emit('bj_join_success', {
-            'nickname': existing['nickname'], 'chips': existing['chips'], 'reconnected': True,
-        })
+        _bj_emit_session_state(session_id)
         _bj_broadcast_lobby()
-        if bj_current_game:
-            emit('bj_round_starting', {})
-            emit('bj_game_state', bj_current_game.to_dict())
         return
 
     if bj_game_active:
-        emit('bj_join_error', {'message': 'Game in progress. Wait for it to finish.'})
+        if not nickname:
+            emit('bj_join_error', {'message': 'Nickname cannot be empty.'})
+            return
+        if len(nickname) > 20:
+            emit('bj_join_error', {'message': 'Nickname must be 20 characters or less.'})
+            return
+        if any(p['nickname'] == nickname for p in bj_session_players.values()):
+            emit('bj_join_error', {'message': f'"{nickname}" is already taken.'})
+            return
+
+        bj_session_players[session_id] = {
+            'session_id': session_id, 'nickname': nickname, 'chips': 1000,
+            'sid': None, 'is_connected': False, 'state': 'queued',
+        }
+        _db_upsert_player(session_id, nickname, 1000, 'blackjack')
+        _bj_attach_session(session_id, _request_sid())
+        bj_join_queue.append(session_id)
+        emit('bj_join_queued', {'nickname': nickname, 'chips': 1000, 'position': len(bj_join_queue)})
+        _bj_broadcast_queue()
         return
 
     lobby_count = len([p for p in bj_session_players.values() if p['state'] == 'lobby'])
@@ -977,8 +998,8 @@ def on_bj_start_round():
     socketio.emit('bj_round_starting', {})
     _bj_broadcast_lobby()
     _bj_broadcast_state()
-    if bj_current_game.state == 'round_over':
-        _bj_emit_round_over()
+    if bj_current_game.state == 'dealer_turn':
+        _bj_schedule_dealer_sequence()
     else:
         _bj_process_auto_turns()
 
@@ -1009,12 +1030,13 @@ def on_bj_next_round():
         return
 
     bj_current_game.players = active_players
+    _bj_flush_queue()
     bj_current_game.start_round()
 
     socketio.emit('bj_round_starting', {})
     _bj_broadcast_state()
-    if bj_current_game.state == 'round_over':
-        _bj_emit_round_over()
+    if bj_current_game.state == 'dealer_turn':
+        _bj_schedule_dealer_sequence()
     else:
         _bj_process_auto_turns()
 
@@ -1046,8 +1068,8 @@ def _bj_apply_action(session_id, action):
     _bj_sync_chips()
     _bj_broadcast_state()
 
-    if event == 'round_over':
-        _bj_emit_round_over()
+    if event == 'dealer_turn':
+        _bj_schedule_dealer_sequence()
     elif event == 'continue':
         _bj_process_auto_turns()
 
@@ -1061,12 +1083,59 @@ def _bj_process_auto_turns():
             event = bj_current_game.apply_action(player.session_id, 'stand')
             _bj_sync_chips()
             _bj_broadcast_state()
-            if event == 'round_over':
-                _bj_emit_round_over()
+            if event == 'dealer_turn':
+                _bj_schedule_dealer_sequence()
                 return
             continue
         _bj_notify_current_player()
         return
+
+
+_bj_dealer_pending = False
+
+
+def _bj_schedule_dealer_sequence():
+    global _bj_dealer_pending
+    if _bj_dealer_pending:
+        return
+    _bj_dealer_pending = True
+    socketio.start_background_task(_bj_run_dealer_sequence)
+
+
+def _bj_run_dealer_sequence():
+    global _bj_dealer_pending
+    game = bj_current_game
+    try:
+        if not game or game.state != 'dealer_turn':
+            return
+
+        _bj_broadcast_state()  # hole card still shows face-down
+        socketio.sleep(1.5)
+
+        if bj_current_game is not game:
+            return
+        game.dealer_reveal()
+        _bj_broadcast_state()  # hole card flips face-up
+
+        while game.dealer_needs_hit():
+            if bj_current_game is not game:
+                return
+            socketio.sleep(1.5)
+
+            if bj_current_game is not game:
+                return
+            game.dealer_hit()
+            game.dealer_reveal_next()
+            _bj_broadcast_state()  # new card dealt already face-up
+
+        if bj_current_game is not game:
+            return
+        game.finish_round()
+        _bj_sync_chips()
+        _bj_broadcast_state()
+        _bj_emit_round_over()
+    finally:
+        _bj_dealer_pending = False
 
 
 def _bj_notify_current_player():
@@ -1099,6 +1168,77 @@ def _bj_lobby_snapshot():
     ]
 
 
+def _bj_broadcast_queue():
+    socketio.emit('bj_queue_update', _bj_queue_snapshot())
+
+
+def _bj_queue_snapshot():
+    out = []
+    for session_id in bj_join_queue:
+        info = bj_session_players.get(session_id)
+        if not info:
+            continue
+        out.append({
+            'nickname': info['nickname'],
+            'chips': info['chips'],
+            'is_connected': info['is_connected'],
+        })
+    return out
+
+
+def _bj_queue_position(session_id: str) -> int:
+    try:
+        return bj_join_queue.index(session_id) + 1
+    except ValueError:
+        return 0
+
+
+def _bj_emit_session_state(session_id):
+    info = bj_session_players.get(session_id)
+    if not info or not info.get('sid'):
+        return
+
+    payload = {'nickname': info['nickname'], 'chips': info['chips'], 'reconnected': True}
+
+    if info['state'] == 'queued':
+        emit('bj_join_queued', {**payload, 'position': _bj_queue_position(session_id)})
+        return
+
+    emit('bj_join_success', payload)
+    if bj_current_game and session_id in bj_session_to_player:
+        emit('bj_round_starting', {})
+        emit('bj_game_state', bj_current_game.to_dict())
+
+
+def _bj_flush_queue():
+    global bj_join_queue
+    if not bj_join_queue or not bj_current_game:
+        return
+
+    remaining_queue = []
+    for session_id in bj_join_queue:
+        if len(bj_current_game.players) >= BJ_MAX_PLAYERS:
+            remaining_queue.append(session_id)
+            continue
+        info = bj_session_players.get(session_id)
+        if not info:
+            continue
+        if not info['is_connected']:
+            remaining_queue.append(session_id)
+            continue
+        info['state'] = 'game'
+        player = HumanPlayer(info['nickname'], session_id, info['sid'], info['chips'])
+        player.is_connected = info['is_connected']
+        bj_current_game.players.append(player)
+        bj_session_to_player[session_id] = player
+        if info['sid']:
+            socketio.emit('bj_round_starting', {}, to=info['sid'])
+
+    bj_join_queue = remaining_queue
+    _bj_broadcast_queue()
+    _bj_broadcast_lobby()
+
+
 def _bj_attach_session(session_id, sid):
     info = bj_session_players[session_id]
     old_sid = info.get('sid')
@@ -1129,12 +1269,14 @@ def _bj_sync_chips():
 
 
 def _bj_end_session():
-    global bj_current_game, bj_session_to_player, bj_game_active
+    global bj_current_game, bj_session_to_player, bj_game_active, bj_join_queue
     bj_game_active = False
     bj_current_game = None
     bj_session_to_player = {}
+    bj_join_queue = []
     for info in bj_session_players.values():
         info['state'] = 'lobby'
+    _bj_broadcast_queue()
     _bj_broadcast_lobby()
 
 
