@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>יום 5 — Broadcasting ו-private state</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --panel2: #1e222b; --ink: #e6e8ec;
+    --muted: #9aa3af; --accent: #6ea8fe; --green: #7ee2b8; --amber: #f4c76b;
+    --pink: #f19bc4; --border: #2a2f3a; --code-bg: #12151c;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.7 -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 32px 20px 120px; }
+  h1 { font-size: 28px; margin: 0 0 4px; }
+  h2 { font-size: 22px; margin: 44px 0 8px; padding-top: 16px; border-top: 1px solid var(--border); }
+  h3 { font-size: 17px; margin: 26px 0 6px; color: var(--accent); }
+  .lead { color: var(--muted); margin: 0 0 20px; }
+  .oneliner { background: var(--panel2); border-right: 3px solid var(--accent);
+    padding: 10px 14px; border-radius: 6px; margin: 10px 0 18px; font-size: 15px; }
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 14px 16px; overflow-x: auto; font-size: 13.5px; line-height: 1.55;
+    font-family: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    direction: ltr; text-align: left; }
+  code { font-family: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace; direction: ltr;
+    unicode-bidi: embed; }
+  p code, li code, td code { background: var(--panel2); padding: 1px 5px; border-radius: 4px;
+    font-size: 13px; display: inline-block; }
+  ol.steps, ul.steps { padding-right: 20px; }
+  ol.steps li, ul.steps li { margin: 7px 0; }
+  .note { background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px 16px; margin: 14px 0; }
+  .note b { color: var(--green); }
+  table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 13.5px; }
+  th, td { border: 1px solid var(--border); padding: 8px 10px; text-align: right; vertical-align: top; }
+  th { background: var(--panel2); }
+  .tag { display: inline-block; font-size: 12px; color: var(--amber);
+    background: rgba(244,199,107,.1); padding: 2px 8px; border-radius: 4px; direction: ltr; }
+  .kbd { color: var(--muted); font-size: 13px; }
+  blockquote { border-right: 3px solid var(--accent); padding-right: 14px; margin-right: 0; }
+  .tok-c { color: #6b7688; font-style: italic; }
+  .tok-s { color: #c3e88d; }
+  .tok-k { color: #c792ea; }
+  .tok-b { color: #7fdbca; }
+  .tok-f { color: #82aaff; }
+  .tok-n { color: #f78c6c; }
+  .tok-d { color: #ffcb6b; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>יום 5 — Broadcasting ו-private state</h1>
+<p class="lead">ארבע פונקציות: <code>_broadcast_game_state</code>, <code>_send_private_hands</code>,
+<code>_send_private_hand</code>, <code>_notify_current_player</code>. השאלה המרכזית:
+<em>למה חלק מהדאטה הולך לכולם, וקלפי ה-hole הולכים רק ל-socket אחד?</em></p>
+
+<div class="oneliner">
+כלל: <b>state ציבורי משודר עם <code>socketio.emit(event, data)</code> (בלי <code>to=</code>)</b> —
+מגיע לכל ה-sockets המחוברים. <b>מידע פרטי נשלח עם <code>socketio.emit(event, data, to=sid)</code></b> —
+מגיע ל-socket יחיד. אין "חדרים" (rooms) כאן; ההפרדה היא פשוט האם יש <code>to=</code> או אין.
+</div>
+
+<h2>שתי רמות של נראוּת</h2>
+<table>
+  <tr><th>מה</th><th>מי רואה</th><th>Event</th><th>איך נשלח</th></tr>
+  <tr><td>pot, community cards, סטאק של כל שחקן, של מי התור, מי עשה fold</td>
+      <td>כולם (host + כל השחקנים)</td><td><code>game_state</code></td>
+      <td><code>socketio.emit(...)</code> — broadcast</td></tr>
+  <tr><td>שני קלפי ה-hole שלך</td><td>אתה בלבד</td><td><code>your_hand</code></td>
+      <td><code>socketio.emit(..., to=player.sid)</code></td></tr>
+  <tr><td>אילו כפתורים להפעיל עכשיו (call/raise/check), min/max raise</td>
+      <td>השחקן שתורו כרגע בלבד</td><td><code>your_turn</code></td>
+      <td><code>socketio.emit(..., to=player.sid)</code></td></tr>
+</table>
+<div class="note"><b>למה בכלל להפריד?</b> ה-host projector מוקרן על מסך גדול שכולם רואים. אם קלפי
+ה-hole היו ב-<code>game_state</code>, כל השולחן היה רואה את היד של כל אחד. ההפרדה היא כלל המשחק,
+לא רק ניקיון קוד.</div>
+
+
+<h2>1. <code>_broadcast_game_state</code> — ה-snapshot הציבורי</h2>
+<span class="tag">event: "game_state" → כל ה-sockets</span>
+<pre><code>def _broadcast_game_state():
+    if current_game:
+        socketio.emit('game_state', current_game.to_dict())   # אין to= -> broadcast לכולם</code></pre>
+<p>הפונקציה עצמה טריוויאלית. כל האינטליגנציה נמצאת ב-<code>current_game.to_dict()</code> — היא
+זו שמחליטה מה ציבורי.</p>
+
+<h3><code>Game.to_dict(for_sid=None)</code> ב-<code>game_engine.py:517</code></h3>
+<pre><code>def to_dict(self, for_sid=None) -> dict:
+    current = self._current_player()
+    players_out = []
+    for i, p in enumerate(self.players):
+        entry = {
+            'nickname': p.nickname, 'chips': p.chips, 'bet': p.bet,
+            'round_bet': getattr(p, 'round_bet', 0),
+            'folded': p.folded,
+            'all_in': p.chips == 0 and not p.folded,
+            'is_connected': getattr(p, 'is_connected', True),
+            'is_bot': getattr(p, 'is_bot', False),
+            'personality': getattr(p, 'personality', None),
+            'is_dealer': i == self.dealer_index,
+            'is_sb': i == self.small_blind_index,
+            'is_bb': i == self.big_blind_index,
+            'is_current': current is not None and p is current,
+        }
+
+        show_hand = (
+            self.state == GameState.SHOWDOWN and not p.folded        # 1: showdown -> כולם רואים
+        ) or (
+            for_sid is not None and hasattr(p, 'sid') and p.sid == for_sid   # 2: זה אתה
+        )
+        if show_hand:
+            entry['hand'] = [c.to_dict() for c in p.hand] if p.hand else []
+            if p.hand and self.community_cards and self.state == GameState.SHOWDOWN:
+                val = best_hand_value(p.hand + self.community_cards)
+                entry['hand_name'] = HAND_NAMES.get(val[0], 'High Card')
+
+        players_out.append(entry)
+
+    out = {
+        'state': self.state.value,
+        'community_cards': [c.to_dict() for c in self.community_cards],
+        'pot': self.pot,
+        'pots': [ {'amount': pot['amount'], 'eligible_count': len(pot['eligible'])}
+                  for pot in self._build_pots() ],
+        'current_bet': self.current_bet,
+        'min_raise': self.min_raise,
+        'players': players_out,
+        'current_player': current.nickname if current else None,
+        'dealer': self.players[self.dealer_index].nickname,
+    }
+    ...
+    return out</code></pre>
+<ul class="steps">
+  <li><b>ברירת מחדל:</b> אף שחקן לא מקבל שדה <code>'hand'</code> — כל הרשומות הן ציבוריות בלבד
+      (chips, folded, whose-turn).</li>
+  <li><b><code>show_hand</code> מתווסף בשני מקרים בלבד:</b>
+    <ol>
+      <li><b>showdown</b> — היד הסתיימה, הקלפים נחשפים לכולם (רק של מי שלא עשה fold).</li>
+      <li><b><code>for_sid</code> תואם</b> — קוראים ל-<code>to_dict</code> עבור socket ספציפי, אז
+          <em>אותו</em> שחקן מקבל את הקלפים שלו בתוך ה-payload.</li>
+    </ol>
+  </li>
+</ul>
+<div class="note"><b>שים לב לשני קוראים שונים:</b> <code>_broadcast_game_state</code> קורא
+<code>to_dict()</code> בלי ארגומנט → 0 ידיים גלויות (מחוץ ל-showdown). אבל
+<code>_emit_session_state</code> (ב-reconnect) קורא <code>to_dict(for_sid=player.sid)</code> →
+לשחקן החוזר מוזרקות הידיים שלו ישירות לתוך ה-snapshot, כדי שלא יצטרך <code>your_hand</code> נפרד.</div>
+
+
+<h2>2. <code>_send_private_hands</code> / <code>_send_private_hand</code></h2>
+<span class="tag">event: "your_hand" → socket יחיד לכל שחקן</span>
+<pre><code>def _send_private_hands():
+    if not current_game:
+        return
+    for player in session_to_player.values():
+        _send_private_hand(player)              # אחד-אחד, כל אחד ל-socket שלו
+
+def _send_private_hand(player):
+    if not player.sid or not player.hand:       # בוט (אין sid) או עוד לא חולקו קלפים -> דלג
+        return
+    socketio.emit('your_hand',
+                  {'hand': [card.to_dict() for card in player.hand]},
+                  to=player.sid)                # ה-to= זה כל העניין</code></pre>
+<ul class="steps">
+  <li>נקרא פעם אחת אחרי <code>start_hand()</code> ואחרי כל <code>next_hand()</code> — כלומר בכל פעם
+      שמחלקים קלפים חדשים.</li>
+  <li>לולאה על <code>session_to_player</code> ולא על <code>current_game.players</code> כי אנחנו צריכים
+      את מיפוי ה-session; שתי הרשימות זהות בתוכן.</li>
+  <li><b>בוטים מדולגים אוטומטית</b> — ל-<code>BotPlayer</code> אין <code>sid</code>, אז
+      <code>_send_private_hand</code> יוצא מיד. הבוט קורא את הקלפים שלו ישירות מ-<code>player.hand</code>
+      בזמן ההחלטה.</li>
+  <li>שחקן <code>offline</code> — <code>player.sid</code> הוא <code>None</code>, אז גם הוא מדולג.
+      כשהוא יחזור, <code>_emit_session_state</code> ישלח לו את היד דרך <code>to_dict(for_sid=...)</code>
+      וגם <code>_send_private_hand</code>.</li>
+</ul>
+
+
+<h2>3. <code>_notify_current_player</code> — ה-prompt הפרטי "התור שלך"</h2>
+<span class="tag">event: "your_turn" → socket אחד: השחקן הנוכחי</span>
+<pre><code>def _notify_current_player():
+    if not current_game:
+        return
+    player = current_game.current_player()
+    if player is None or player.sid is None:      # בוט או offline -> אין למי לשלוח prompt
+        return
+    socketio.emit('your_turn', {
+        **current_game.legal_actions_for(player),  # can_check, can_raise, min_raise, max_raise, call_amount...
+        'big_blind': current_game.big_blind,
+        'pot': current_game.pot,
+    }, to=player.sid)</code></pre>
+<ul class="steps">
+  <li>שולח <em>רק</em> לשחקן שתורו עכשיו. אף אחד אחר לא צריך את הכפתורים.</li>
+  <li><code>legal_actions_for(player)</code> מחשב בשרת אילו פעולות חוקיות (אי אפשר check מול bet,
+      גובה raise מינימלי, וכו') — ה-client לא צריך להכיר את חוקי הפוקר, הוא רק מצייר את מה שהשרת
+      התיר.</li>
+  <li>נקרא מ-<code>_process_automatic_turns</code> כשהראש בתור הוא אדם מחובר, ומ-<code>_apply_and_advance</code>
+      אחרי <code>invalid_action</code> (כדי לבקש שוב מאותו שחקן).</li>
+  <li><b>Guard <code>player.sid is None</code>:</b> אם התור הגיע לבוט או ל-offline, לא שולחים כלום —
+      <code>_process_automatic_turns</code> כבר מטפל בהם דרך <code>_schedule_bot_turn</code> או
+      auto check/fold.</li>
+</ul>
+
+
+<h2>איך שלושתן משתלבות ב-start_hand</h2>
+<pre><code># מתוך on_start_game / on_next_hand:
+_broadcast_game_state()      # ציבורי -> כולם: הודעה שהיד התחילה, מי ה-dealer, גובה ה-blinds
+_send_private_hands()        # פרטי  -> לכל שחקן: שני הקלפים שלו
+_process_automatic_turns()   # -> בסופו קורא _notify_current_player() לשחקן הראשון לפעול (אם אדם)</code></pre>
+<p>הסדר חשוב: קודם ה-state הציבורי (המסך מתעדכן), אחר כך הקלפים הפרטיים (כל אחד רואה את היד שלו),
+ורק אז ה-prompt לפעולה.</p>
+
+
+<h2>בדיקה עצמית</h2>
+<ol class="steps">
+  <li>איך <code>game_state</code> מגיע לכל השחקנים בלי rooms? <span class="kbd">socketio.emit ללא
+      to= משדר לכל ה-sockets המחוברים.</span></li>
+  <li>למה קלפי hole לא ב-<code>game_state</code>? <span class="kbd">ה-host projector ציבורי; כל
+      השולחן היה רואה כל יד. to_dict() בלי for_sid משמיט אותם.</span></li>
+  <li>מתי כן רואים ידיים בתוך <code>game_state</code>? <span class="kbd">ב-showdown (של מי שלא
+      folded), או כשקוראים to_dict(for_sid=X) עבור אותו שחקן.</span></li>
+  <li>למה <code>_send_private_hand</code> לא שולח לבוטים? <span class="kbd">אין להם sid; הם קוראים
+      player.hand ישירות.</span></li>
+  <li>מה <code>_notify_current_player</code> שולח שאין ב-<code>game_state</code>? <span class="kbd">legal_actions_for —
+      אילו כפתורים להפעיל ומגבלות raise, מחושב בשרת.</span></li>
+</ol>
+
+<blockquote>
+"ציבורי = <code>socketio.emit</code> בלי <code>to=</code>. פרטי = עם <code>to=sid</code>.
+<code>game_state</code> משודר לכולם ומשמיט קלפי hole חוץ מ-showdown; <code>your_hand</code> שולח לכל
+שחקן את הקלפים שלו ל-socket שלו; <code>your_turn</code> שולח לשחקן הנוכחי בלבד את הכפתורים החוקיים
+שהשרת חישב."
+</blockquote>
+
+</div>
+<script>
+(function () {
+  var KW = /^(?:def|class|return|if|elif|else|for|while|in|not|and|or|is|None|True|False|import|from|as|with|try|except|finally|global|nonlocal|lambda|continue|break|pass|yield|del|assert|await|async)$/;
+  var BUILTIN = /^(?:self|socketio|emit|print|int|str|len|min|max|list|set|dict|bool|float|isinstance|getattr|hasattr|setattr|next|range|enumerate|any|all|super|Exception)$/;
+  function esc(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+  var re = /(#[^\n]*)|('(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*")|(@[A-Za-z_][\w.]*)|(\b\d+(?:\.\d+)?\b)|([A-Za-z_]\w*)/g;
+  document.querySelectorAll("pre > code").forEach(function (code) {
+    var src = code.textContent, out = "", last = 0, m;
+    while ((m = re.exec(src))) {
+      out += esc(src.slice(last, m.index));
+      if (m[1]) out += '<span class="tok-c">' + esc(m[1]) + "</span>";
+      else if (m[2]) out += '<span class="tok-s">' + esc(m[2]) + "</span>";
+      else if (m[3]) out += '<span class="tok-d">' + esc(m[3]) + "</span>";
+      else if (m[4]) out += '<span class="tok-n">' + esc(m[4]) + "</span>";
+      else {
+        var w = m[5];
+        if (KW.test(w)) out += '<span class="tok-k">' + w + "</span>";
+        else if (BUILTIN.test(w)) out += '<span class="tok-b">' + w + "</span>";
+        else if (/^\s*\(/.test(src.slice(m.index + w.length))) out += '<span class="tok-f">' + w + "</span>";
+        else out += w;
+      }
+      last = re.lastIndex;
+    }
+    out += esc(src.slice(last));
+    code.innerHTML = out;
+  });
+})();
+</script>
+</body>
+</html>

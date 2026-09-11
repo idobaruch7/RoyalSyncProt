@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ימים 6–7 — ה-blackjack mirror</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --panel2: #1e222b; --ink: #e6e8ec;
+    --muted: #9aa3af; --accent: #6ea8fe; --green: #7ee2b8; --amber: #f4c76b;
+    --pink: #f19bc4; --border: #2a2f3a; --code-bg: #12151c;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.7 -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 32px 20px 120px; }
+  h1 { font-size: 28px; margin: 0 0 4px; }
+  h2 { font-size: 22px; margin: 44px 0 8px; padding-top: 16px; border-top: 1px solid var(--border); }
+  h3 { font-size: 17px; margin: 26px 0 6px; color: var(--accent); }
+  .lead { color: var(--muted); margin: 0 0 20px; }
+  .oneliner { background: var(--panel2); border-right: 3px solid var(--accent);
+    padding: 10px 14px; border-radius: 6px; margin: 10px 0 18px; font-size: 15px; }
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 14px 16px; overflow-x: auto; font-size: 13.5px; line-height: 1.55;
+    font-family: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    direction: ltr; text-align: left; }
+  code { font-family: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace; direction: ltr;
+    unicode-bidi: embed; }
+  p code, li code, td code { background: var(--panel2); padding: 1px 5px; border-radius: 4px;
+    font-size: 13px; display: inline-block; }
+  ol.steps, ul.steps { padding-right: 20px; }
+  ol.steps li, ul.steps li { margin: 7px 0; }
+  .note { background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px 16px; margin: 14px 0; }
+  .note b { color: var(--green); }
+  table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 13.5px; }
+  th, td { border: 1px solid var(--border); padding: 8px 10px; text-align: right; vertical-align: top; }
+  th { background: var(--panel2); }
+  td.eq { color: var(--green); }
+  td.diff { color: var(--amber); }
+  .tag { display: inline-block; font-size: 12px; color: var(--amber);
+    background: rgba(244,199,107,.1); padding: 2px 8px; border-radius: 4px; direction: ltr; }
+  .kbd { color: var(--muted); font-size: 13px; }
+  blockquote { border-right: 3px solid var(--accent); padding-right: 14px; margin-right: 0; }
+  .tok-c { color: #6b7688; font-style: italic; }
+  .tok-s { color: #c3e88d; }
+  .tok-k { color: #c792ea; }
+  .tok-b { color: #7fdbca; }
+  .tok-f { color: #82aaff; }
+  .tok-n { color: #f78c6c; }
+  .tok-d { color: #ffcb6b; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>ימים 6–7 — ה-blackjack mirror</h1>
+<p class="lead">המטרה היא לא ללמוד את הבלאקג'ק מאפס — אלא <em>לאשר שהוא אותה תבנית</em>: כל
+<code>bj_*</code> הוא בן־דוד של פונקציית פוקר שכבר קראת. אם אתה מזהה את הצורה, סיימת.</p>
+
+<div class="oneliner">
+Flask process אחד מריץ <b>שני מופעי משחק במקביל</b>. הבלאקג'ק הוא עותק שני של אותו רעיון עם
+prefix <code>bj_</code> על כל שם: אותם maps, אותו
+<b>emit → validate → mutate → broadcast</b>, אותו סיפור reconnect/queue.</p>
+
+<h2>מפת ההקבלה — פוקר ↔ בלאקג'ק</h2>
+<table>
+  <tr><th>פוקר</th><th>בלאקג'ק</th><th>זהה?</th></tr>
+  <tr><td><code>session_players</code>, <code>sid_to_session</code>, <code>session_to_player</code>,
+          <code>current_game</code>, <code>game_active</code>, <code>join_queue</code></td>
+      <td><code>bj_session_players</code>, <code>bj_sid_to_session</code>, <code>bj_session_to_player</code>,
+          <code>bj_current_game</code>, <code>bj_game_active</code>, <code>bj_join_queue</code></td>
+      <td class="eq">זהה — 6 משתני מודול נפרדים</td></tr>
+  <tr><td><code>on_player_action</code></td><td><code>on_bj_player_action</code></td><td class="eq">זהה</td></tr>
+  <tr><td><code>_apply_and_advance</code></td><td><code>_bj_apply_action</code></td><td class="eq">זהה תבנית</td></tr>
+  <tr><td><code>_broadcast_game_state</code></td><td><code>_bj_broadcast_state</code></td><td class="eq">זהה</td></tr>
+  <tr><td><code>_process_automatic_turns</code></td><td><code>_bj_process_auto_turns</code></td><td class="eq">זהה תבנית</td></tr>
+  <tr><td><code>_schedule_bot_turn</code> / <code>_run_bot_turn</code> + <code>_bot_action_pending</code></td>
+      <td><code>_bj_schedule_dealer_sequence</code> / <code>_bj_run_dealer_sequence</code> + <code>_bj_dealer_pending</code></td>
+      <td class="diff">אותו mutex-ב-background, אבל מריץ <b>את הדילר</b> ולא בוט</td></tr>
+  <tr><td><code>_notify_current_player</code></td><td><code>_bj_notify_current_player</code></td><td class="eq">זהה</td></tr>
+  <tr><td><code>_attach_session_to_sid</code>, <code>_sync_player_connection</code></td>
+      <td><code>_bj_attach_session</code>, <code>_bj_sync_player_connection</code></td><td class="eq">זהה</td></tr>
+  <tr><td><code>_flush_queue</code>, <code>_end_game_session</code>, <code>_sync_all_game_player_chips</code></td>
+      <td><code>_bj_flush_queue</code>, <code>_bj_end_session</code>, <code>_bj_sync_chips</code></td><td class="eq">זהה</td></tr>
+  <tr><td>קלפי hole פרטיים דרך <code>your_hand</code> / <code>to_dict(for_sid)</code></td>
+      <td>—</td><td class="diff">אין. קלף ה-hole של הדילר face-down לכולם; קלפי השחקנים גלויים</td></tr>
+  <tr><td>יש בוטים (<code>BotPlayer</code>)</td><td>אין בוטים</td>
+      <td class="diff">רק בני אדם + דילר אוטומטי</td></tr>
+</table>
+
+
+<h2>1. <code>on_bj_player_action</code> — נקודת הכניסה</h2>
+<span class="tag">client emits: "bj_player_action" {action}  (Hit / Stand / Double)</span>
+<pre><code>@socketio.on('bj_player_action')
+def on_bj_player_action(data):
+    if not bj_current_game or not bj_game_active:
+        return
+    action = (data.get('action') or '').strip().lower()
+    session_id = bj_sid_to_session.get(_request_sid())     # מזהים מי שלח
+    if not session_id:
+        return
+    _bj_apply_action(session_id, action)</code></pre>
+<p>ההבדל היחיד מ-<code>on_player_action</code>: כאן מתרגמים <code>sid → session_id</code> כבר בשלב
+הזה ומעבירים <code>session_id</code> פנימה. בפוקר ה-<code>sid</code> עצמו מועבר וה-engine מתרגם.
+פרט, לא רעיון.</p>
+
+
+<h2>2. <code>_bj_apply_action</code> — אותו "מנצח", קצר יותר</h2>
+<pre><code>def _bj_apply_action(session_id, action):
+    if not bj_current_game:
+        return
+
+    event = bj_current_game.apply_action(session_id, action)   # validate + mutate
+    _bj_sync_chips()                                           # engine chips -> bj_session_players
+    _bj_broadcast_state()                                      # broadcast ציבורי לכולם
+
+    if event == 'dealer_turn':                                 # כל השחקנים סיימו -> תור הדילר
+        _bj_schedule_dealer_sequence()
+    elif event == 'continue':                                  # עוד שחקנים לפעול
+        _bj_process_auto_turns()</code></pre>
+<p>שים אותו ליד <code>_apply_and_advance</code>: אותו רצף בדיוק — <b>apply → sync chips → broadcast
+→ הסתעפות לפי ה-event</b>. פשוט יותר כי בבלאקג'ק אין <code>action_event</code> toast ואין
+<code>not_your_turn</code> מטופל בנפרד (ה-engine מחזיר אותו, וכאן פשוט לא נכנסים לאף branch).</p>
+
+<h3>ה-engine: <code>BlackjackGame.apply_action</code> (<code>blackjack_engine.py:76</code>)</h3>
+<pre><code>def apply_action(self, session_id, action):
+    if not self.to_act or self.to_act[0] != session_id:
+        return 'not_your_turn'                        # אותה בדיקת בעלות כמו בפוקר
+    state = self.player_states.get(session_id)
+    if not state or state['status'] != 'playing':
+        return 'invalid'
+
+    if action == 'stand':
+        state['status'] = 'standing'; self.to_act.pop(0)
+    elif action == 'hit':
+        state['cards'].extend(self.deck.deal(1))
+        val = hand_value(state['cards'])
+        if val > 21:   state['status'] = 'bust';     self.to_act.pop(0)
+        elif val == 21: state['status'] = 'standing'; self.to_act.pop(0)
+        # else: נשאר 'playing' - אפשר לפעול שוב
+    elif action == 'double':
+        ... מכפילים bet, קלף אחד, תמיד יוצאים מהתור ...
+        self.to_act.pop(0)
+    else:
+        return 'invalid'
+
+    if not self.to_act:                # ה-to_act queue התרוקן
+        self.state = 'dealer_turn'
+        return 'dealer_turn'
+    return 'continue'</code></pre>
+<div class="note"><b>אותו <code>to_act</code> queue כמו בפוקר.</b> כל פעולה עושה <code>pop(0)</code>
+(חוץ מ-hit שלא פוצץ ולא הגיע ל-21 — מקביל ל-full raise שמשאיר אותך בתור). כשהתור מתרוקן, השלב
+מתקדם — כאן ל-<code>'dealer_turn'</code> במקום street חדש.</div>
+
+
+<h2>3. <code>_bj_process_auto_turns</code> — מקביל ל-<code>_process_automatic_turns</code></h2>
+<pre><code>def _bj_process_auto_turns():
+    while bj_current_game and bj_current_game.state == 'player_turns':
+        player = bj_current_game.current_player()
+        if player is None:
+            return
+        if not getattr(player, 'is_connected', True):        # שחקן offline
+            event = bj_current_game.apply_action(player.session_id, 'stand')   # ברירת מחדל: stand
+            _bj_sync_chips(); _bj_broadcast_state()
+            if event == 'dealer_turn':
+                _bj_schedule_dealer_sequence(); return
+            continue
+        _bj_notify_current_player()                          # אדם מחובר -> prompt, מחכים
+        return</code></pre>
+<p>קצר יותר מגרסת הפוקר <b>כי אין בוטים</b> — אין ענף <code>isinstance(player, BotPlayer)</code>.
+נשארו שני מקרים: אדם מחובר (prompt) או offline (auto-<code>stand</code>, שקול ל-auto-<code>check</code>
+של פוקר).</p>
+
+
+<h2>4. רצף הדילר — מקביל ל-bot turn, אבל דטרמיניסטי</h2>
+<span class="tag">אותה תבנית: <code>_bj_dealer_pending</code> mutex + background task + <code>socketio.sleep</code></span>
+<pre><code>_bj_dealer_pending = False
+
+def _bj_schedule_dealer_sequence():
+    global _bj_dealer_pending
+    if _bj_dealer_pending:                       # כמו _bot_action_pending: לא לערום שני רצפים
+        return
+    _bj_dealer_pending = True
+    socketio.start_background_task(_bj_run_dealer_sequence)
+
+def _bj_run_dealer_sequence():
+    global _bj_dealer_pending
+    game = bj_current_game
+    try:
+        if not game or game.state != 'dealer_turn':
+            return
+        _bj_broadcast_state()                    # קלף hole עדיין face-down
+        socketio.sleep(1.5)
+        if bj_current_game is not game:          # המשחק התאפס בזמן ה-sleep -> נטוש
+            return
+        game.dealer_reveal()
+        _bj_broadcast_state()                    # קלף ה-hole מתהפך face-up
+
+        while game.dealer_needs_hit():           # חוקי בית: hit עד 17
+            if bj_current_game is not game: return
+            socketio.sleep(1.5)
+            if bj_current_game is not game: return
+            game.dealer_hit()
+            game.dealer_reveal_next()
+            _bj_broadcast_state()               # קלף חדש כבר face-up
+
+        if bj_current_game is not game: return
+        game.finish_round()                      # מחשבים תוצאות, משלמים
+        _bj_sync_chips()
+        _bj_broadcast_state()
+        _bj_emit_round_over()                    # מקביל ל-_broadcast_hand_over של פוקר
+    finally:
+        _bj_dealer_pending = False               # תמיד מנקים, גם על exception</code></pre>
+<ul class="steps">
+  <li><b>אותם שלושה מנגנוני בטיחות</b> כמו <code>_run_bot_turn</code>: guard בוליאני, בדיקת
+      <code>bj_current_game is not game</code> אחרי כל <code>sleep</code>, וניקוי ה-guard ב-<code>finally</code>.</li>
+  <li><b>ההבדל:</b> הבוט מקבל החלטה מ-<code>player.get_action(...)</code>; הדילר משחק לפי חוק קבוע
+      (<code>dealer_needs_hit</code> → hit עד 17). דטרמיניסטי, לא AI.</li>
+  <li>ה-<code>socketio.sleep(1.5)</code> בין קלפים הוא לצורך דרמה על מסך ה-host. משתמשים ב-<code>socketio.sleep</code>
+      ולא ב-<code>time.sleep</code> כי הוא async-mode-aware (עושה את הדבר הנכון תחת threading /
+      eventlet / gevent), והוא רץ ב-background task נפרד כך שה-handler שהתחיל אותו כבר חזר.</li>
+</ul>
+
+
+<h2>5. <code>_bj_broadcast_state</code> ו-<code>to_dict</code> — ה-private state כאן</h2>
+<pre><code>def _bj_broadcast_state():
+    if bj_current_game:
+        socketio.emit('bj_game_state', bj_current_game.to_dict())   # broadcast יחיד, בלי to=</code></pre>
+<p>שים לב: <b>יש רק <code>to_dict()</code> אחד, בלי פרמטר <code>for_sid</code>.</b> למה מותר?</p>
+<pre><code># blackjack_engine.py:168
+def to_dict(self):
+    dealer_display = [
+        c.to_dict() if i < self.dealer_revealed else {'rank': '?', 'suit': '?'}   # <-- ההסתרה היחידה
+        for i, c in enumerate(self.dealer_hand)
+    ]
+    ...
+    for p in self.players:
+        players_out.append({
+            'nickname': p.nickname, 'chips': p.chips,
+            'status': state.get('status', 'spectating'),
+            'cards': [c.to_dict() for c in cards],        # קלפי השחקן -- גלויים לכולם
+            'hand_value': hand_value(cards) if cards else 0,
+            'result': self.results.get(p.session_id),
+        })</code></pre>
+<div class="note"><b>בבלאקג'ק אין מידע פרטי בין שחקנים.</b> כל היד של כל שחקן גלויה על השולחן —
+זה חוק המשחק. הדבר היחיד שמוסתר הוא <em>קלף ה-hole של הדילר</em>, וזה מוסתר <b>מכולם</b> בו־זמנית עד
+<code>dealer_reveal()</code>. לכן אין צורך ב-<code>for_sid</code>, ב-<code>your_hand</code>, ולא
+ב-2 רמות נראוּת — snapshot ציבורי אחד מספיק.</div>
+
+<h3>ההבדל הזה בטבלה</h3>
+<table>
+  <tr><th></th><th>פוקר</th><th>בלאקג'ק</th></tr>
+  <tr><td>מה מוסתר</td><td>קלפי ה-hole של כל שחקן, מכל אחד אחר</td><td>קלף ה-hole של הדילר בלבד</td></tr>
+  <tr><td>ממי</td><td>מכל שאר השחקנים + ה-host</td><td>מכולם בו־זמנית</td></tr>
+  <tr><td>מנגנון</td><td><code>to_dict(for_sid)</code> + <code>your_hand</code> per-socket</td>
+      <td><code>{'rank':'?','suit':'?'}</code> בתוך אותו broadcast יחיד</td></tr>
+  <tr><td>emit פרטי?</td><td>כן — <code>your_hand</code>, <code>your_turn</code></td>
+      <td>רק <code>bj_your_turn</code> (כפתורים), אין קלפים פרטיים</td></tr>
+</table>
+
+<h3><code>_bj_notify_current_player</code></h3>
+<pre><code>def _bj_notify_current_player():
+    player = bj_current_game.current_player()
+    if player is None or not getattr(player, 'sid', None):
+        return
+    state = bj_current_game.player_states.get(player.session_id, {})
+    cards = state.get('cards', [])
+    val = bj_hand_value(cards) if cards else 0
+    can_double = len(cards) == 2 and player.chips > 0
+    socketio.emit('bj_your_turn', {'hand_value': val, 'can_double': can_double}, to=player.sid)</code></pre>
+<p>אותה צורה כמו <code>_notify_current_player</code>: ל-socket אחד, עם המידע שהשרת חישב לגבי הפעולות
+החוקיות (כאן: האם <code>double</code> אפשרי).</p>
+
+
+<h2>מחזור מלא, פוקר מול בלאקג'ק</h2>
+<table>
+  <tr><th>שלב</th><th>פוקר</th><th>בלאקג'ק</th></tr>
+  <tr><td>התחלה</td><td><code>on_start_game</code> → <code>Game(players)</code> → <code>start_hand()</code></td>
+      <td><code>on_bj_start_round</code> → <code>BlackjackGame(players)</code> → <code>start_round()</code></td></tr>
+  <tr><td>מהלך שחקן</td><td><code>on_player_action</code> → <code>_apply_and_advance</code></td>
+      <td><code>on_bj_player_action</code> → <code>_bj_apply_action</code></td></tr>
+  <tr><td>auto-turns</td><td><code>_process_automatic_turns</code> (בוט / offline)</td>
+      <td><code>_bj_process_auto_turns</code> (offline בלבד)</td></tr>
+  <tr><td>"היריב" האוטומטי</td><td>bot turn ב-background</td><td>dealer sequence ב-background</td></tr>
+  <tr><td>סוף</td><td><code>_broadcast_hand_over</code></td><td><code>finish_round()</code> + <code>_bj_emit_round_over</code></td></tr>
+  <tr><td>יד/סבב הבא</td><td><code>on_next_hand</code> → <code>_flush_queue</code> → <code>next_hand()</code></td>
+      <td><code>on_bj_next_round</code> → <code>_bj_flush_queue</code> → <code>start_round()</code></td></tr>
+</table>
+
+
+<h2>בדיקה עצמית</h2>
+<ol class="steps">
+  <li>למה בבלאקג'ק אין <code>to_dict(for_sid)</code>? <span class="kbd">אין מידע פרטי בין שחקנים; רק
+      קלף ה-hole של הדילר מוסתר, ומכולם, דרך {'rank':'?'}.</span></li>
+  <li>מה מקביל ל-<code>_bot_action_pending</code>? <span class="kbd">_bj_dealer_pending — אותו mutex
+      שמונע שני dealer sequences במקביל.</span></li>
+  <li>מה מקביל ל-full raise שמשאיר אותך בתור? <span class="kbd">hit שלא פוצץ ולא הגיע ל-21 — לא
+      עושה to_act.pop.</span></li>
+  <li>למה <code>_bj_process_auto_turns</code> קצר יותר? <span class="kbd">אין בוטים, אז אין ענף
+      BotPlayer — רק אדם מחובר או offline.</span></li>
+  <li>איך תהליך Flask אחד מריץ שני משחקים? <span class="kbd">שתי קבוצות משתני מודול נפרדות
+      (poker / bj_), אותם handlers עם prefix, אותו socketio server. הרצפים הארוכים (bot / dealer)
+      רצים כ-background tasks דרך socketio.start_background_task כדי שה-handlers יחזרו מיד.</span></li>
+</ol>
+
+<blockquote>
+"בלאקג'ק הוא ה-mirror: כל <code>bj_*</code> הוא אותה פונקציה עם prefix. <code>on_bj_player_action</code>
+→ <code>_bj_apply_action</code> עושה <b>apply → sync chips → broadcast → הסתעפות לפי event</b>, בדיוק
+כמו <code>_apply_and_advance</code>. ה-dealer sequence הוא ה-bot turn בגרסה דטרמיניסטית, עם אותו
+<code>_pending</code> mutex ו-<code>socketio.sleep</code>. ההבדל היחיד המהותי: אין state פרטי בין
+שחקנים, אז יש רק <code>to_dict()</code> אחד ו-broadcast ציבורי אחד."
+</blockquote>
+
+</div>
+<script>
+(function () {
+  var KW = /^(?:def|class|return|if|elif|else|for|while|in|not|and|or|is|None|True|False|import|from|as|with|try|except|finally|global|nonlocal|lambda|continue|break|pass|yield|del|assert|await|async)$/;
+  var BUILTIN = /^(?:self|socketio|emit|print|int|str|len|min|max|list|set|dict|bool|float|isinstance|getattr|hasattr|setattr|next|range|enumerate|any|all|super|Exception)$/;
+  function esc(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+  var re = /(#[^\n]*)|('(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*")|(@[A-Za-z_][\w.]*)|(\b\d+(?:\.\d+)?\b)|([A-Za-z_]\w*)/g;
+  document.querySelectorAll("pre > code").forEach(function (code) {
+    var src = code.textContent, out = "", last = 0, m;
+    while ((m = re.exec(src))) {
+      out += esc(src.slice(last, m.index));
+      if (m[1]) out += '<span class="tok-c">' + esc(m[1]) + "</span>";
+      else if (m[2]) out += '<span class="tok-s">' + esc(m[2]) + "</span>";
+      else if (m[3]) out += '<span class="tok-d">' + esc(m[3]) + "</span>";
+      else if (m[4]) out += '<span class="tok-n">' + esc(m[4]) + "</span>";
+      else {
+        var w = m[5];
+        if (KW.test(w)) out += '<span class="tok-k">' + w + "</span>";
+        else if (BUILTIN.test(w)) out += '<span class="tok-b">' + w + "</span>";
+        else if (/^\s*\(/.test(src.slice(m.index + w.length))) out += '<span class="tok-f">' + w + "</span>";
+        else out += w;
+      }
+      last = re.lastIndex;
+    }
+    out += esc(src.slice(last));
+    code.innerHTML = out;
+  });
+})();
+</script>
+</body>
+</html>

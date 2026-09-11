@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ימים 3–4 — action lifecycle מלא אחד</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --panel2: #1e222b; --ink: #e6e8ec;
+    --muted: #9aa3af; --accent: #6ea8fe; --green: #7ee2b8; --amber: #f4c76b;
+    --pink: #f19bc4; --border: #2a2f3a; --code-bg: #12151c;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.7 -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 32px 20px 120px; }
+  h1 { font-size: 28px; margin: 0 0 4px; }
+  h2 { font-size: 22px; margin: 44px 0 8px; padding-top: 16px; border-top: 1px solid var(--border); }
+  h3 { font-size: 17px; margin: 26px 0 6px; color: var(--accent); }
+  .lead { color: var(--muted); margin: 0 0 20px; }
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 14px 16px; overflow-x: auto; font-size: 13.5px; line-height: 1.55;
+    font-family: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    direction: ltr; text-align: left; }
+  code { font-family: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace; direction: ltr;
+    unicode-bidi: embed; }
+  p code, li code, td code { background: var(--panel2); padding: 1px 5px; border-radius: 4px;
+    font-size: 13px; display: inline-block; }
+  ol.steps { padding-right: 20px; }
+  ol.steps li { margin: 7px 0; }
+  .note { background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px 16px; margin: 14px 0; }
+  .note b { color: var(--green); }
+  .mantra { font-size: 20px; text-align: center; letter-spacing: .02em; color: var(--amber);
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 10px;
+    padding: 18px; margin: 20px 0; font-family: "SF Mono", Menlo, monospace; direction: ltr; }
+  .phase { display: inline-block; font-size: 12px; letter-spacing: .05em;
+    padding: 2px 8px; border-radius: 4px; margin-left: 8px; direction: ltr; }
+  .p1 { color: var(--accent); background: rgba(110,168,254,.12); }
+  .p2 { color: var(--pink); background: rgba(241,155,196,.12); }
+  .p3 { color: var(--amber); background: rgba(244,199,107,.12); }
+  .p4 { color: var(--green); background: rgba(126,226,184,.12); }
+  table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 13.5px; }
+  th, td { border: 1px solid var(--border); padding: 8px 10px; text-align: right; vertical-align: top; }
+  th { background: var(--panel2); }
+  .kbd { color: var(--muted); font-size: 13px; }
+  blockquote { border-right: 3px solid var(--accent); border-left: none;
+    padding-right: 14px; margin-right: 0; color: var(--ink); }
+  .tok-c { color: #6b7688; font-style: italic; }
+  .tok-s { color: #c3e88d; }
+  .tok-k { color: #c792ea; }
+  .tok-b { color: #7fdbca; }
+  .tok-f { color: #82aaff; }
+  .tok-n { color: #f78c6c; }
+  .tok-d { color: #ffcb6b; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>ימים 3–4 — Trace של action lifecycle מלא אחד</h1>
+<p class="lead">עוקבים אחרי מהלך יחיד מהלחיצה של השחקן ועד שכל מסך מתעדכן:
+<code>on_player_action</code> → <code>_apply_and_advance</code> → <code>current_game.apply_action</code>
+→ <code>_broadcast_game_state</code> (וההמשך של הבוט).</p>
+
+<div class="mantra">emit → validate → mutate → broadcast</div>
+
+<p>ארבע המילים האלה הן כל הסיפור. כל מה שלמטה הוא רק <em>איפה</em> בקוד כל מילה קורית.</p>
+
+<table>
+  <tr><th>שלב</th><th>איפה</th><th>מה</th></tr>
+  <tr><td><span class="phase p1">emit</span></td><td>browser → <code>on_player_action</code></td>
+      <td>ה-socket event מגיע עם <code>{action, amount}</code></td></tr>
+  <tr><td><span class="phase p2">validate</span></td><td><code>apply_action</code> ב-<code>game_engine.py</code></td>
+      <td>זה התור שלך? הפעולה חוקית? ← מחזיר event string</td></tr>
+  <tr><td><span class="phase p3">mutate</span></td><td><code>apply_action</code> שוב</td>
+      <td>fold/העברת צ'יפים, הזזת ה-<code>to_act</code> queue, אולי קידום ה-street</td></tr>
+  <tr><td><span class="phase p4">broadcast</span></td><td><code>_apply_and_advance</code> + helpers</td>
+      <td><code>_sync_all_game_player_chips</code>, <code>_broadcast_game_state</code>,
+          <code>action_event</code>, ואז auto-turns או hand-over</td></tr>
+</table>
+
+
+<h2><span class="phase p1">emit</span> שלב 1 — <code>on_player_action</code></h2>
+<pre><code>@socketio.on('player_action')
+def on_player_action(data):
+    if not current_game or not game_active:      # מתעלמים מ-events תועים (לובי, paused)
+        return
+    action = data.get('action', '')             # 'fold' | 'check' | 'call' | 'raise'
+    amount = int(data.get('amount', 0))          # משמעותי רק עבור 'raise'
+    _apply_and_advance(_request_sid(), action, amount)</code></pre>
+<p>ה-handler מעביר את <code>_request_sid()</code> — ה-socket id של מי ששלח — הלאה למטה כזהות של
+הפועל. ה-<code>sid</code> הזה הוא איך ה-engine מאוחר יותר בודק "זה באמת התור שלך".</p>
+
+
+<h2>שלב 2 — <code>_apply_and_advance</code> (המנצח)</h2>
+<pre><code>def _apply_and_advance(sid: str, action: str, amount: int):
+    if not current_game:
+        return
+
+    actor = current_game.current_player()                     # A: זוכרים מי פועל לפני המוטציה
+    _, event = current_game.apply_action(sid, action, amount) # B: validate + mutate, מקבלים event string
+    _sync_all_game_player_chips()                             # C: צ'יפים מה-engine -> session_players
+    _broadcast_game_state()                                   # D: דוחפים מצב ציבורי לכולם
+
+    if event == 'invalid_action':                             # E
+        session_id = sid_to_session.get(sid)
+        info = session_players.get(session_id) if session_id else None
+        if info and info.get('sid'):
+            socketio.emit('action_error',
+                {'message': current_game.last_action_error or 'Illegal action.'},
+                to=info['sid'])
+        _notify_current_player()                              # מבקשים שוב מאותו שחקן
+        return
+
+    if event == 'not_your_turn':                              # F: זורקים בשקט
+        return
+
+    if actor is not None:                                     # G: אומרים לכל המסכים מה קרה
+        _emit_action_event(actor, action.lower(),
+                           all_in=(actor.chips == 0 and not actor.folded))
+
+    if event == 'game_over':                                  # H: שחקן אחרון שנשאר / showdown
+        _broadcast_hand_over()
+    elif event in ('continue', 'street_end'):                 # I: ממשיכים את מחזור התורות
+        _process_automatic_turns()</code></pre>
+
+<ol class="steps">
+  <li><b>A — snapshot של הפועל קודם.</b> אחרי <code>apply_action</code> ה-"current player" כבר התקדם,
+      אז אנחנו תופסים את <code>actor</code> עכשיו כדי לתאר את המהלך מאוחר יותר ב-G.</li>
+  <li><b>B — קריאה אחת עושה validate + mutate</b> ומחזירה <code>event</code> string שאומר למנצח מה
+      לעשות הלאה. זה הציר של כל העיצוב.</li>
+  <li><b>C — sync של צ'יפים.</b> במהלך יד אובייקט ה-<code>Game</code> אחראי על ספירת הצ'יפים; זה
+      מעתיק אותם חזרה ל-<code>session_players</code> כדי שה-snapshots של lobby/queue יישארו נכונים.</li>
+  <li><b>D — broadcast של המצב הציבורי ללא תנאי</b>, אפילו על פעולה לא חוקית, כדי שהמסכים אף פעם לא
+      יצאו מסנכרון.</li>
+  <li><b>E — פעולה לא חוקית:</b> שולחים <code>action_error</code> <em>רק ל-socket הבודד הזה</em>
+      (<code>to=info['sid']</code>), ואז <code>_notify_current_player()</code> שולח מחדש את
+      prompt ה-<code>your_turn</code> לאותו אדם. התור לא מתקדם.</li>
+  <li><b>F — לא התור שלך:</b> מישהו לחץ פעמיים או client מיושן שלח. זורקים בשקט — D כבר סנכרן אותם
+      מחדש.</li>
+  <li><b>G — action_event</b> הוא ה-toast הקוסמטי "Alice raised to 40 / Bob folded" שכל מסך מציג.
+      נפרד מ-game_state כי זה <em>event</em>, לא <em>state</em>.</li>
+  <li><b>H / I — הסתעפות לפי ה-event:</b> או שהיד הסתיימה (<code>game_over</code>) או שהמחזור ממשיך
+      ואנחנו מעבירים ל-<code>_process_automatic_turns()</code>.</li>
+</ol>
+
+<div class="note"><b>למה ערכי ההחזרה חשובים.</b> <code>_apply_and_advance</code> אף פעם לא בודק את
+השדות הפנימיים של המשחק כדי להחליט מה לעשות — הוא מגיב רק ל-<code>event</code> string.
+ה-engine ושכבת ה-socket נשארים מנותקים (decoupled).</div>
+
+
+<h2><span class="phase p2">validate</span> <span class="phase p3">mutate</span> שלב 3 — <code>Game.apply_action</code></h2>
+<p><code>server/game_engine.py:264</code>. כאן "validate" ו-"mutate" באמת חיים.</p>
+
+<h3>Validate</h3>
+<pre><code>def apply_action(self, sid, action, amount=0):
+    player = self._current_player()                 # תור של מי לפי ה-to_act queue
+    if player is None:
+        return None, 'error'
+    self.last_action_error = ''
+
+    if sid is not None and hasattr(player, 'sid') and player.sid != sid:
+        return None, 'not_your_turn'                # השולח אינו השחקן הנוכחי
+
+    action = action.lower()
+    player_idx = self.to_act[0]</code></pre>
+<p><b>שים לב ל-<code>sid is not None</code>:</b> בוטים ו-auto-plays של offline מעבירים
+<code>sid=None</code> ומדלגים על בדיקת הבעלות — השרת כבר יודע שהוא קורא בשם השחקן הנכון.</p>
+
+<h3>Mutate — branch אחד לכל פעולה</h3>
+<pre><code>    if action == 'fold':
+        player.folded = True
+        self._remove_current_actor(player_idx)      # מוציאים מה-to_act queue
+
+    elif action == 'check':
+        if not self.can_check(player):
+            self.last_action_error = 'Cannot check while facing a bet.'
+            return None, 'invalid_action'
+        self._remove_current_actor(player_idx)
+
+    elif action == 'call':
+        call_amount = self.get_call_amount(player)
+        if call_amount <= 0:
+            self._remove_current_actor(player_idx)          # אין מה ל-call = check
+        else:
+            actual = min(call_amount, player.chips)         # אי אפשר ל-call יותר ממה שיש לך
+            self._commit_bet(player, actual)               # צ'יפים -> pot
+            self._remove_current_actor(player_idx)
+
+    elif action == 'raise':
+        classification, amount = self.classify_raise(player, amount)
+        if classification == 'invalid':
+            self.last_action_error = 'Illegal raise amount.'
+            return None, 'invalid_action'
+        previous_bet = self.current_bet
+        cost = amount - player.round_bet
+        self._commit_bet(player, cost)
+        self.current_bet = player.round_bet
+        if classification == 'full_raise':
+            self.min_raise = amount - previous_bet
+            self._reopen_action_from(player_idx)           # כולם צריכים להגיב שוב
+        else:                                              # all-in קצר: לא פותח מחדש את ה-betting
+            self._remove_current_actor(player_idx)
+
+    else:
+        self.last_action_error = 'Unknown action.'
+        return None, 'invalid_action'</code></pre>
+
+<h3>ואז מחליטים איזה סוג event זה היה</h3>
+<pre><code>    alive = [p for p in self.players if not p.folded]
+    if len(alive) == 1:                     # כל השאר עשו fold
+        self._award_pots(alive)
+        self.state = GameState.SHOWDOWN
+        return None, 'game_over'
+
+    if not self.to_act:                     # סבב ה-betting הושלם
+        return self._advance_street()       # מחלקים flop/turn/river, או resolve של showdown -> יכול להחזיר 'game_over'
+
+    return self._current_player(), 'continue'   # המקרה הרגיל: השחקן הבא בתור</code></pre>
+
+<div class="note"><b>ה-<code>to_act</code> list הוא ה-turn engine.</b> כל פעולה מוציאה (pop) את
+הפועל הנוכחי ממנו. <em>full raise</em> בונה אותו מחדש (<code>_reopen_action_from</code>) כדי שהיריבים
+יקבלו הזדמנות להגיב. כשהוא מתרוקן, ה-street מתקדם. כשנשאר רק שחקן אחד שלא עשה fold, היד נגמרה.</div>
+
+<h3>תנועת צ'יפים — <code>_commit_bet</code></h3>
+<pre><code>def _commit_bet(self, player, amount):
+    if amount <= 0: return
+    player.chips    -= amount
+    player.round_bet += amount     # תרומה בסבב ה-betting הזה (מתאפס בכל street)
+    player.bet      += amount      # תרומה בכל היד (עבור side pots)
+    self.pot        += amount</code></pre>
+
+
+<h2><span class="phase p4">broadcast</span> שלב 4 — דוחפים state החוצה</h2>
+
+<h3><code>_broadcast_game_state</code> — ה-snapshot הציבורי</h3>
+<pre><code>def _broadcast_game_state():
+    if current_game:
+        socketio.emit('game_state', current_game.to_dict())   # בלי 'to=' -> כל ה-sockets המחוברים</code></pre>
+<p><code>to_dict()</code> בלי <code>for_sid</code> משמיט את קלפי ה-hole של כל שחקן. בטוח לשלוח ל-host
+projector ולכל שחקן בבת אחת. (קלפי hole פרטיים יוצאים בנפרד דרך <code>your_hand</code> — זה יום 5.)</p>
+
+<h3><code>_emit_action_event</code> — ה-toast של "מה קרה עכשיו"</h3>
+<pre><code>def _emit_action_event(player, action, all_in=False):
+    if not player or not action: return
+    if action in ('call', 'raise'):
+        amount = int(getattr(player, 'round_bet', 0) or 0)   # מציגים את הסכום שהוא עכשיו בפנים עליו
+    else:
+        amount = 0
+    socketio.emit('action_event', {
+        'actor': player.nickname, 'action': action,
+        'amount': amount, 'all_in': bool(all_in),
+    })</code></pre>
+
+<h3><code>_notify_current_player</code> — ה-prompt הפרטי "התור שלך"</h3>
+<pre><code>def _notify_current_player():
+    if not current_game: return
+    player = current_game.current_player()
+    if player is None or player.sid is None:      # בוט, או אדם offline -> אין למי לשלוח prompt
+        return
+    socketio.emit('your_turn', {
+        **current_game.legal_actions_for(player),  # אילו כפתורים להפעיל, min/max raise
+        'big_blind': current_game.big_blind,
+        'pot': current_game.pot,
+    }, to=player.sid)                              # socket אחד בלבד</code></pre>
+
+
+<h2>שלב 5 — <code>_process_automatic_turns</code> (למה השולחן אף פעם לא נתקע)</h2>
+<pre><code>def _process_automatic_turns():
+    while current_game and current_game.state.value not in ('waiting', 'showdown'):
+        player = current_game.current_player()
+        if player is None:
+            return
+
+        if isinstance(player, BotPlayer):
+            _schedule_bot_turn(player)            # מעבירים ל-background task, ואז עוצרים את ה-loop
+            return
+
+        if isinstance(player, HumanPlayer) and not player.is_connected:
+            call_amount = current_game.current_bet - getattr(player, 'round_bet', 0)
+            action = 'check' if call_amount <= 0 else 'fold'   # ברירת מחדל ל-offline: check אם חינם, אחרת fold
+            _, event = current_game.apply_action(None, action, 0)
+            _emit_action_event(player, action, all_in=(player.chips == 0 and not player.folded))
+            _sync_all_game_player_chips()
+            _broadcast_game_state()
+            if event == 'game_over':
+                _broadcast_hand_over()
+                return
+            continue                              # loop שוב עבור השחקן הבא
+
+        _notify_current_player()                  # אדם מחובר: שולחים לו prompt ומחכים
+        return</code></pre>
+<ol class="steps">
+  <li><b>אדם מחובר בתור</b> ← שולחים <code>your_turn</code>, יוצאים מה-loop, מחכים ל-<code>player_action</code>
+      שלו.</li>
+  <li><b>אדם offline בתור</b> ← auto check-or-fold מיד, broadcast, ו-<code>continue</code> לשחקן הבא
+      באותו loop.</li>
+  <li><b>בוט בתור</b> ← <code>_schedule_bot_turn</code> ו-return. ה-loop מתחדש מאוחר יותר, מתוך
+      ה-background task של הבוט.</li>
+</ol>
+
+
+<h2>שלב 6 — המעקף של הבוט: <code>_schedule_bot_turn</code> / <code>_run_bot_turn</code></h2>
+<pre><code>_bot_action_pending = False   # guard ברמת המודול
+
+def _schedule_bot_turn(player):
+    global _bot_action_pending
+    if _bot_action_pending:            # תור בוט כבר בטיסה -> לא לערום עוד אחד
+        return
+    _bot_action_pending = True
+    socketio.start_background_task(_run_bot_turn, player)   # non-blocking; השרת ממשיך לשרת events</code></pre>
+<pre><code>def _run_bot_turn(player):
+    global _bot_action_pending
+    try:
+        socketio.sleep(random.uniform(0.7, 1.5))     # sleep async-mode-aware -> השהיית "חשיבה"
+
+        if not current_game or current_game.state.value in ('waiting', 'showdown'):
+            return
+        if current_game.current_player() is not player:   # העולם התקדם בזמן שישנו
+            return
+
+        game_state = { **current_game.legal_actions_for(player),
+                       'pot': current_game.pot,
+                       'community_cards_objects': current_game.community_cards }
+        decision = player.get_action(game_state) or {}
+        act = (decision.get('action') or '').strip().lower()
+        amount = int(decision.get('amount', 0) or 0)
+        _, event = current_game.apply_action(None, act, amount)
+
+        if event in ('invalid_action', 'not_your_turn', 'error'):   # הבוט בחר משהו לא חוקי
+            act, amount = 'fold', 0
+            _, event = current_game.apply_action(None, act, amount)
+
+        _emit_action_event(player, act, all_in=(player.chips == 0 and not player.folded))
+        _sync_all_game_player_chips()
+        _broadcast_game_state()
+        if event == 'game_over':
+            _broadcast_hand_over()
+            return
+    finally:
+        _bot_action_pending = False        # תמיד מנקים את ה-guard, גם על exception
+
+    _process_automatic_turns()             # ממשיכים את המחזור (השחקן הבא יכול להיות בוט / אדם אחר)</code></pre>
+
+<div class="note">
+<b>אמור את זה בצורה קונקרטית (שבוע 2 מבקש את זה):</b> קודם כול, הבוט "חושב" מתוך
+<code>start_background_task</code> ולא מתוך ה-handler — כך <code>_apply_and_advance</code> חוזר מיד
+ולא מחזיק את מהלך השחקן שהתחיל אותו. <code>socketio.sleep()</code> הוא async-mode-aware: תחת
+eventlet/gevent הוא מוותר (yields) ל-event loop כך שההשהיה של 0.7–1.5 שנ' לא חוסמת אף אחד, ותחת
+threading הוא נופל ל-<code>time.sleep</code> על ה-thread של ה-task בלבד. <code>time.sleep()</code>
+ישיר בתוך handler היה מחזיק את עיבוד ה-events של אותו client עד שהוא מסתיים — <code>socketio.sleep</code>
+בתוך background task הוא הדפוס הנכון והנייד.
+<br><br>
+<b>ממה <code>_bot_action_pending</code> מגן:</b> בלעדיו, טריגר שני מהיר (למשל disconnect ששולח
+<code>_process_automatic_turns</code> בזמן ש-task של בוט באמצע sleep) היה יכול לתזמן
+<em>task שני</em> לאותו בוט. שניהם מתעוררים, שניהם קוראים ל-<code>apply_action</code> לאותו מושב —
+השני רואה <code>to_act</code> שהשתנה ואז או פועל פעמיים או משבש את סדר התורות. ה-guard הופך את
+"תור בוט בעיצומו" ל-mutex. הבדיקה החוזרת <code>current_player() is not player</code> אחרי ה-sleep
+היא קו ההגנה השני.
+</div>
+
+
+<h2>שלב 7 — סוף היד: <code>_broadcast_hand_over</code></h2>
+<pre><code>def _broadcast_hand_over():
+    if not current_game: return
+    _sync_all_game_player_chips()
+    winners = current_game.get_winners()
+    socketio.emit('hand_over', {
+        'winners': [p.nickname for p in winners],
+        'winner_hands':   current_game.winner_hand_names(),
+        'winner_details': current_game.winner_hand_details(),
+        'pot_results':    current_game.get_pot_results(),
+        'game_state':     current_game.to_dict(),
+    })
+    _finish_game_if_one_player_left()      # אם רק שחקן אחד עדיין עם צ'יפים -> emit 'game_finished', סיום session</code></pre>
+<p>אחרי זה ה-host מציג את המנצח ומחכה שה-host ישלח <code>next_hand</code> (ימים 1–2, handler מס' 9),
+שמלולף את כל המחזור שוב.</p>
+
+
+<h2>אמור את כל ה-trace בנשימה אחת</h2>
+<p class="kbd">תתאמן עד שזה שוטף:</p>
+<blockquote>
+"השחקן לוחץ Call — הדפדפן <b>שולח (emit)</b> <code>player_action</code>. <code>on_player_action</code>
+מגן וקורא ל-<code>_apply_and_advance</code>, שזוכר את הפועל וקורא ל-<code>apply_action</code> על
+ה-engine. ה-engine עושה <b>validate</b> — sid נכון, מהלך חוקי — ואז <b>mutate</b>: מעביר צ'יפים
+ל-pot, מוציא (pop) את הפועל מ-<code>to_act</code>, ומחזיר event: <code>continue</code>,
+<code>game_over</code>, או error. <code>_apply_and_advance</code> אז עושה <b>broadcast</b> — מסנכרן
+צ'יפים, שולח <code>game_state</code> לכולם, שולח <code>action_event</code> toast — ואז קורא או
+ל-<code>_broadcast_hand_over</code> או ל-<code>_process_automatic_turns</code>, ששולח prompt לאדם
+הבא, משחק אוטומטית עבור offline, או מתזמן בוט ב-background task non-blocking שחוזר בלולאה לאותו
+מחזור."
+</blockquote>
+
+</div>
+<script>
+(function () {
+  var KW = /^(?:def|class|return|if|elif|else|for|while|in|not|and|or|is|None|True|False|import|from|as|with|try|except|finally|global|nonlocal|lambda|continue|break|pass|yield|del|assert|await|async)$/;
+  var BUILTIN = /^(?:self|socketio|emit|print|int|str|len|min|max|list|set|dict|bool|float|isinstance|getattr|hasattr|setattr|next|range|enumerate|any|all|super|Exception)$/;
+  function esc(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+  var re = /(#[^\n]*)|('(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*")|(@[A-Za-z_][\w.]*)|(\b\d+(?:\.\d+)?\b)|([A-Za-z_]\w*)/g;
+  document.querySelectorAll("pre > code").forEach(function (code) {
+    var src = code.textContent, out = "", last = 0, m;
+    while ((m = re.exec(src))) {
+      out += esc(src.slice(last, m.index));
+      if (m[1]) out += '<span class="tok-c">' + esc(m[1]) + "</span>";
+      else if (m[2]) out += '<span class="tok-s">' + esc(m[2]) + "</span>";
+      else if (m[3]) out += '<span class="tok-d">' + esc(m[3]) + "</span>";
+      else if (m[4]) out += '<span class="tok-n">' + esc(m[4]) + "</span>";
+      else {
+        var w = m[5];
+        if (KW.test(w)) out += '<span class="tok-k">' + w + "</span>";
+        else if (BUILTIN.test(w)) out += '<span class="tok-b">' + w + "</span>";
+        else if (/^\s*\(/.test(src.slice(m.index + w.length))) out += '<span class="tok-f">' + w + "</span>";
+        else out += w;
+      }
+      last = re.lastIndex;
+    }
+    out += esc(src.slice(last));
+    code.innerHTML = out;
+  });
+})();
+</script>
+</body>
+</html>

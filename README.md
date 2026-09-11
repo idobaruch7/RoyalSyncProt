@@ -1,4 +1,4 @@
-# RoyalSyncProt
+# RoyalSync
 
 A self-contained multiplayer card game platform featuring Texas Hold'em poker and Blackjack. Built with Flask + Socket.IO server and static HTML pages, with in-memory state and no database.
 
@@ -28,7 +28,7 @@ Then open the URLs below. The server prints both a host URL and a LAN player URL
 ## Project layout
 
 ```
-RoyalSyncProt/
+RoyalSync/
 ├── server/
 │   ├── app.py                    # Flask + Socket.IO, lobby & session management
 │   ├── game_engine.py            # Texas Hold'em: cards, hand evaluation, betting
@@ -40,10 +40,6 @@ RoyalSyncProt/
 │   ├── player/index.html         # Texas Hold'em player view
 │   ├── blackjack-host/index.html # Blackjack dealer console
 │   └── blackjack-player/index.html # Blackjack player view
-└── docs/                         # Dev-facing docs (read these first)
-    ├── ARCHITECTURE.md           # Big-picture design, socket events, lifecycle
-    ├── GAME_ENGINE.md            # Poker rules + state machine implementation
-    └── BOTS.md                   # How bots are scheduled and how personalities decide
 ```
 
 ## How it works (one-paragraph version)
@@ -53,8 +49,6 @@ The server supports two card games with in-memory state:
 **Texas Hold'em:** Players join via `/player` with a nickname; the host opens `/host`, can add/remove bots and click **Start Game**. Bots are server-side and act on a small randomized "thinking" delay. Every action (fold/check/call/raise) emits a toast to all clients. Busted players stay seated so the table view never re-shuffles.
 
 **Blackjack:** Players connect to `/blackjack-player` while the dealer/host manages the game from `/blackjack-host`. Supports hit/stand actions with multiple rounds per session.
-
-See `docs/ARCHITECTURE.md` for the full picture.
 
 ## Optional environment variables
 

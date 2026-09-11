@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ימים 1–2 — כל ה-on_* event handlers ב-app.py</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --panel2: #1e222b; --ink: #e6e8ec;
+    --muted: #9aa3af; --accent: #6ea8fe; --green: #7ee2b8; --amber: #f4c76b;
+    --border: #2a2f3a; --code-bg: #12151c;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.7 -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 32px 20px 120px; }
+  h1 { font-size: 28px; margin: 0 0 4px; }
+  h2 { font-size: 22px; margin: 48px 0 8px; padding-top: 16px; border-top: 1px solid var(--border); }
+  h3 { font-size: 17px; margin: 28px 0 6px; color: var(--accent); }
+  .lead { color: var(--muted); margin: 0 0 24px; }
+  .oneliner { background: var(--panel2); border-right: 3px solid var(--accent);
+    padding: 10px 14px; border-radius: 6px; margin: 10px 0 18px; font-size: 15px; }
+  .tag { display: inline-block; font-size: 12px; letter-spacing: .04em;
+    color: var(--amber); background: rgba(244,199,107,.1); padding: 2px 8px; border-radius: 4px;
+    direction: ltr; }
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 14px 16px; overflow-x: auto; font-size: 13.5px; line-height: 1.55;
+    font-family: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    direction: ltr; text-align: left; }
+  code { font-family: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace; direction: ltr;
+    unicode-bidi: embed; }
+  p code, li code { background: var(--panel2); padding: 1px 5px; border-radius: 4px; font-size: 13px;
+    display: inline-block; }
+  ol.steps { padding-right: 20px; }
+  ol.steps li { margin: 6px 0; }
+  .note { background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px 16px; margin: 14px 0; }
+  .note b { color: var(--green); }
+  nav { background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 18px; margin: 24px 0 8px; }
+  nav a { color: var(--accent); text-decoration: none; display: block; padding: 3px 0; font-size: 14px; }
+  nav a:hover { text-decoration: underline; }
+  .kbd { color: var(--muted); font-size: 13px; }
+  .flow { font-family: "SF Mono", Menlo, monospace; font-size: 13px; color: var(--green);
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px;
+    direction: ltr; text-align: left; }
+  .tok-c { color: #6b7688; font-style: italic; }
+  .tok-s { color: #c3e88d; }
+  .tok-k { color: #c792ea; }
+  .tok-b { color: #7fdbca; }
+  .tok-f { color: #82aaff; }
+  .tok-n { color: #f78c6c; }
+  .tok-d { color: #ffcb6b; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>ימים 1–2 — מיפוי כל <code>on_*</code> event handler</h1>
+<p class="lead">קוראים את <code>server/app.py</code> מלמעלה למטה. המטרה לכל handler:
+<em>"ה-client שולח (emit) את event X ← הפונקציה הזו רצה ← הדברים האלה קורים."</em></p>
+
+<div class="oneliner">
+כל הקובץ הוא <b>Socket.IO event router</b>. הדפדפן (עמוד ה-host או עמוד ה-player) שולח events
+בעלי שם דרך websocket; כל פונקציית <code>@socketio.on('name')</code> היא התגובה של השרת.
+אין request/response — השרת דוחף מצב חזרה החוצה עם <code>socketio.emit(...)</code> /
+<code>emit(...)</code> בכל פעם שמשהו משתנה.
+</div>
+
+<nav>
+  <strong>ה-handlers בעמוד הזה</strong>
+  <a href="#connect">on_connect — socket נפתח</a>
+  <a href="#disconnect">on_disconnect — socket נסגר</a>
+  <a href="#host">on_host_connected — מסך ה-host נטען</a>
+  <a href="#join">on_join_game — שחקן לוחץ "Join"</a>
+  <a href="#addbot">on_add_bot / on_remove_bot — כפתורי הבוטים בלובי</a>
+  <a href="#start">on_start_game — ה-host לוחץ "Start"</a>
+  <a href="#action">on_player_action — שחקן לוחץ Fold/Call/Raise</a>
+  <a href="#restart">on_restart_game / on_pause_game</a>
+  <a href="#next">on_next_hand — ה-host לוחץ "Next hand"</a>
+</nav>
+
+<h2>ה-state המשותף שכולם משנים</h2>
+<p>לפני ה-handlers, חמישה dicts/lists ברמת המודול מחזיקים את כל עולם הפוקר
+(<code>app.py:33–40</code>). תחזיק אותם בראש — כל handler נוגע בחלק מהם.</p>
+<pre><code>MAX_PLAYERS = 8
+session_players  = {}   # session_id -> {nickname, chips, sid, is_connected, state, is_bot?, personality?}
+sid_to_session   = {}    # socket id  -> session_id      (reverse lookup: "מי שלח את זה?")
+current_game     = None  # אובייקט ה-Game החי, או None כשאנחנו בלובי
+session_to_player = {}   # session_id -> Player object    (קיים רק כשמשחק רץ)
+game_active      = False # True בין start_game לסיום המשחק
+join_queue      = []    # session_ids שמחכים להיכנס למשחק שרץ</code></pre>
+<div class="note">
+<b>שני מזהים, ולמה.</b> <code>session_id</code> נוצר על ידי הדפדפן ונשמר ב-<code>localStorage</code>
+שלו — הוא שורד רענון עמוד. <code>sid</code> הוא ה-Socket.IO connection id — הוא <em>חדש בכל פעם</em>
+שה-socket מתחבר מחדש. השרת שומר את הדאטה האמיתי לפי <code>session_id</code> ומתייחס ל-<code>sid</code>
+כאל "הצינור הנוכחי לאדם הזה" שאפשר לזרוק. ה-indirection הזה הוא מה שגורם ל-reconnect לעבוד (שבוע 2).
+</div>
+
+<h3>Helper שתראה שוב ושוב</h3>
+<pre><code>def _request_sid() -> str:
+    return str(getattr(request, 'sid', ''))   # ה-socket id של מי ששלח את ה-event הנוכחי</code></pre>
+
+
+<h2 id="connect">1. <code>on_connect</code></h2>
+<span class="tag">client emits: "connect" (אוטומטי, בפתיחת socket)</span>
+<pre><code>@socketio.on('connect')
+def on_connect():
+    print(f'[royalsync][connect] {_request_sid()}')</code></pre>
+<p>לא עושה כלום חוץ מ-log. נקודה חשובה: <b>socket חדש עדיין לא מזהה את המשתמש.</b>
+השרת לא יודע מי זה עד שהעמוד שולח <code>join_game</code> (שחקן) או <code>host_connected</code> (host)
+עם <code>session_id</code>.</p>
+
+
+<h2 id="disconnect">2. <code>on_disconnect</code></h2>
+<span class="tag">client emits: "disconnect" (אוטומטי — טאב נסגר, רענון, נפילת רשת)</span>
+<pre><code>@socketio.on('disconnect')
+def on_disconnect():
+    sid = _request_sid()
+
+    # ---- Poker ----
+    session_id = sid_to_session.pop(sid, None)          # 1
+    if session_id:
+        info = session_players.get(session_id)
+        if info:
+            info['sid'] = None                          # 2
+            info['is_connected'] = False
+            player = session_to_player.get(session_id)
+            if player:
+                player.sid = None                       # 3
+                player.is_connected = False
+            _broadcast_lobby()                           # 4
+            _broadcast_queue()
+            if current_game:
+                if not _finish_game_if_too_few_connected():   # 5
+                    _process_automatic_turns()                # 6
+                    _broadcast_game_state()
+
+    # ---- Blackjack ---- (אותה צורה, maps של bj_*)
+    ...</code></pre>
+<ol class="steps">
+  <li><b>שוכחים את הצינור.</b> <code>pop</code> מוחק את הקישור <code>sid → session_id</code> ומחזיר
+      לנו את ה-<code>session_id</code> שהוא הצביע עליו (או <code>None</code> אם ה-socket הזה אף פעם
+      לא היה שחקן פוקר — למשל ה-host, או שחקן blackjack).</li>
+  <li><b>מסמנים את האדם כ-offline</b> ב-<code>session_players</code> אבל <em>שומרים את הרשומה</em> —
+      הכינוי, הצ'יפים והמושב שלו עדיין שמורים ל-reconnect.</li>
+  <li><b>משקפים את זה על אובייקט ה-<code>Player</code> החי</b> אם משחק רץ, כדי שה-engine ידע שהמושב
+      הזה עכשיו "connected: false".</li>
+  <li><b>מודיעים לכולם</b> שהלובי / ה-queue השתנו (הנקודה של השחקן הזה הופכת אפורה).</li>
+  <li><b>אם נשארו מעט מדי בני אדם</b>, <code>_finish_game_if_too_few_connected()</code> מסיים את
+      היד ומחזיר <code>True</code> — עוצרים כאן.</li>
+  <li><b>אחרת ממשיכים את המשחק.</b> ייתכן שהשחקן שהתנתק היה זה שאמור לפעול;
+      <code>_process_automatic_turns()</code> יעשה auto-fold/check עבורו כדי שהשולחן לא ייתקע, ואז
+      נשדר את המצב החדש. (פירוט מלא בימים 3–4.)</li>
+</ol>
+<div class="note"><b>הרעיון המרכזי:</b> disconnect אף פעם לא מוחק שחקן. הוא מוריד אותו לדרגת
+"מושב שמור, offline". כל ה-reconnect תלוי בזה.</div>
+
+
+<h2 id="host">3. <code>on_host_connected</code></h2>
+<span class="tag">client emits: "host_connected" (עמוד ה-projector /host, בטעינה)</span>
+<pre><code>@socketio.on('host_connected')
+def on_host_connected():
+    emit('lobby_update', _lobby_snapshot())     # השחקנים היושבים כרגע
+    emit('queue_update', _queue_snapshot())     # שחקנים שמחכים
+    if current_game:
+        emit('game_starting', {})               # אומרים ל-host לעבור ל-view של השולחן
+        emit('game_state', current_game.to_dict())   # מצב משחק ציבורי מלא</code></pre>
+<p>זה handler של <b>catch-up</b>. <code>emit()</code> (בלי <code>to=</code>) שולח רק ל-socket ששאל.
+אם מסך ה-host נטען מחדש באמצע משחק, ארבע השורות האלה בונות מחדש את כל ה-view שלו מאפס. שים לב שה-host
+מקבל את <code>current_game.to_dict()</code> <em>בלי</em> קלפי hole — מסך ה-host הוא ציבורי.</p>
+
+
+<h2 id="join">4. <code>on_join_game</code></h2>
+<span class="tag">client emits: "join_game" {nickname, session_id} (שחקן לוחץ "Join")</span>
+<p>ה-handler הארוך ביותר. יש לו ארבע יציאות נפרדות — תקרא אותו כעץ החלטה.</p>
+
+<h3>4a. ולידציה של ה-session id</h3>
+<pre><code>nickname   = (data.get('nickname') or '').strip()
+session_id = (data.get('session_id') or '').strip()
+if not session_id:
+    emit('join_error', {'message': 'Missing browser session. Refresh and try again.'}); return
+if len(session_id) > 100:
+    emit('join_error', {'message': 'Invalid browser session.'}); return
+existing = session_players.get(session_id)</code></pre>
+<p><code>existing</code> הוא העיקר: <b>האם זה אדם חדש לגמרי או אדם שחוזר?</b></p>
+
+<h3>4b. (נתיב DB — כרגע dead code)</h3>
+<pre><code>if not existing and DB_ENABLED:      # DB_ENABLED הוא False, אז הבלוק הזה אף פעם לא רץ
+    ... טוען nickname/chips מ-sqlite ...</code></pre>
+<p>החלטת עיצוב שצריך להגן עליה בשבוע 3: ה-state חי בזיכרון בלבד, אז restart של השרת מוחק את כולם.
+ה-scaffolding של sqlite נמצא כאן אבל מכובה.</p>
+
+<h3>4c. שחקן חוזר ← reconnect</h3>
+<pre><code>if existing:
+    _attach_session_to_sid(session_id, _request_sid())   # מפנים את ה-session ל-socket החדש
+    _sync_player_connection(session_id)                   # מעתיקים sid/connected על אובייקט ה-Player
+    _emit_session_state(session_id)                       # משחזרים את המצב שלו: lobby / queued / in-game+hand
+    _broadcast_lobby(); _broadcast_queue()
+    if current_game:
+        _broadcast_game_state()
+    return</code></pre>
+<p>אין בדיקת nickname, אין בדיקת מושב — כבר יש לו מושב. זה סיפור ה-"רענון דפדפן ← sid חדש, אותו
+session_id ← השרת מקשר מחדש" שתצייר מהזיכרון בשבוע 2.</p>
+
+<h3>4d. שחקן חדש, אבל השולחן מלא</h3>
+<pre><code>if not game_active and _lobby_seat_count() >= MAX_PLAYERS:
+    emit('join_error', {'message': f'Table is full (max {MAX_PLAYERS}).'}); return</code></pre>
+
+<h3>4e. שחקן חדש — ולידציה של ה-nickname</h3>
+<pre><code>if not nickname: ... 'Nickname cannot be empty.'
+if len(nickname) > 20: ... 'Nickname must be 20 characters or less.'
+if any(p['nickname'] == nickname for p in session_players.values()): ... 'already taken'</code></pre>
+
+<h3>4f. יוצרים את הרשומה</h3>
+<pre><code>session_players[session_id] = {
+    'session_id': session_id, 'nickname': nickname, 'chips': 1000,
+    'sid': None, 'is_connected': False, 'state': 'lobby',
+}
+_db_upsert_player(...)                                   # no-op (DB כבוי)
+_attach_session_to_sid(session_id, _request_sid())       # עכשיו is_connected הופך ל-True
+
+if game_active:                                          # יד כבר רצה
+    session_players[session_id]['state'] = 'queued'
+    join_queue.append(session_id)
+    emit('join_queued', {..., 'position': len(join_queue)})
+    _broadcast_queue()
+    return
+
+emit('join_success', {'nickname': nickname, 'chips': 1000})   # המקרה הרגיל: מתיישבים בלובי
+_broadcast_lobby()</code></pre>
+<div class="note"><b>ארבע תוצאות:</b> error · reconnect · queued (משחק בעיצומו) · מושב בלובי.
+כולם מתחילים עם 1000 צ'יפים.</div>
+
+<h3>Helpers שה-handler הזה נשען עליהם</h3>
+<pre><code>def _attach_session_to_sid(session_id, sid):
+    info = session_players[session_id]
+    old_sid = info.get('sid')
+    if old_sid and old_sid != sid:
+        sid_to_session.pop(old_sid, None)   # זורקים את מיפוי ה-socket הישן
+    sid_to_session[sid] = session_id
+    info['sid'] = sid
+    info['is_connected'] = True
+
+def _sync_player_connection(session_id):    # דוחפים info -> אובייקט Player חי
+    player = session_to_player.get(session_id)
+    info   = session_players.get(session_id)
+    if player and info:
+        player.sid = info['sid']
+        player.is_connected = info['is_connected']</code></pre>
+
+
+<h2 id="addbot">5. <code>on_add_bot</code> ו-<code>on_remove_bot</code></h2>
+<span class="tag">client emits: "add_bot" {personality} / "remove_bot" {nickname}</span>
+<pre><code>@socketio.on('add_bot')
+def on_add_bot(data):
+    if game_active:
+        emit('add_bot_error', {'message': 'Can only add bots before the game starts.'}); return
+    if _lobby_seat_count() >= MAX_PLAYERS:
+        emit('add_bot_error', {'message': f'Table is full (max {MAX_PLAYERS}).'}); return
+
+    personality = ((data or {}).get('personality') or 'calculator').strip().lower()
+    if personality not in {'calculator', 'rock', 'maniac'}:
+        personality = 'calculator'
+
+    bot_session_id = _random_id('bot')
+    while bot_session_id in session_players:      # מבטיחים ייחודיות
+        bot_session_id = _random_id('bot')
+
+    session_players[bot_session_id] = {
+        'session_id': bot_session_id, 'nickname': _unique_bot_nickname(personality),
+        'chips': 1000, 'sid': None, 'is_connected': True,   # בוטים הם "תמיד מחוברים"
+        'state': 'lobby', 'is_bot': True, 'personality': personality,
+    }
+    _broadcast_lobby()</code></pre>
+<p>בוט הוא סתם עוד רשומה ב-<code>session_players</code> עם <code>is_bot: True</code>,
+<code>is_connected: True</code> (הוא אף פעם לא נופל) ובלי <code>sid</code> (אין למי לשלוח).
+<code>on_remove_bot</code> הוא המראה: מוצאים את הרשומה עם nickname תואם ו-<code>is_bot</code>,
+עושים <code>pop</code>, משדרים מחדש. שניהם lobby-only — חסומים ברגע ש-<code>game_active</code>.</p>
+
+
+<h2 id="start">6. <code>on_start_game</code></h2>
+<span class="tag">client emits: "start_game" (ה-host לוחץ "Start")</span>
+<pre><code>@socketio.on('start_game')
+def on_start_game():
+    global current_game, session_to_player, game_active
+
+    eligible = _eligible_start_players()          # בוטים + בני אדם מחוברים בלובי
+    if len(eligible) < 2:
+        emit('start_error', {'message': 'Need at least 2 connected players to start.'}); return
+
+    players = []
+    session_to_player = {}
+    for session_id, info in session_players.items():
+        if info['state'] != 'lobby': continue
+        if not info.get('is_bot') and not info.get('is_connected'): continue   # מדלגים על בני אדם offline
+        if len(players) >= MAX_PLAYERS: continue
+        info['state'] = 'game'
+        if info.get('is_bot'):
+            player = BotPlayer(info['nickname'], info.get('personality') or 'calculator', info['chips'])
+            player.session_id = session_id
+            player.is_connected = True
+        else:
+            player = HumanPlayer(info['nickname'], session_id, info['sid'], info['chips'])
+            player.is_connected = info['is_connected']
+        players.append(player)
+        session_to_player[session_id] = player
+
+    current_game = Game(players)       # engine של היד משתלט
+    game_active = True
+    current_game.start_hand()          # מערבבים, שמים blinds, מחלקים קלפי hole
+
+    socketio.emit('game_starting', {})          # כל מסך עובר לשולחן
+    _broadcast_lobby()
+    _broadcast_game_state()                      # מצב ציבורי לכולם
+    _send_private_hands()                        # קלפי hole, socket אחד לכל שחקן
+    _process_automatic_turns()                   # אם הראשון לפעול הוא בוט, מפעילים אותו</code></pre>
+<ol class="steps">
+  <li>בונה את המפה <code>session_to_player</code> (מאוכלסת רק בזמן משחק).</li>
+  <li>הופך כל רשומת לובי לאובייקט <code>BotPlayer</code> / <code>HumanPlayer</code> אמיתי ומעביר את
+      ה-<code>state</code> שלו ל-<code>'game'</code>.</li>
+  <li>בונה את ה-<code>Game</code> וקורא ל-<code>start_hand()</code> — מכאן <code>game_engine.py</code>
+      אחראי על סדר התורות, ה-pot וה-streets.</li>
+  <li>ארבעה emits: <code>game_starting</code> (מעבר view) ← <code>game_state</code> (ציבורי) ←
+      <code>your_hand</code> לכל שחקן (פרטי) ← auto-turns.</li>
+</ol>
+
+
+<h2 id="action">7. <code>on_player_action</code></h2>
+<span class="tag">client emits: "player_action" {action, amount} (Fold / Check / Call / Raise)</span>
+<pre><code>@socketio.on('player_action')
+def on_player_action(data):
+    if not current_game or not game_active:
+        return
+    action = data.get('action', '')
+    amount = int(data.get('amount', 0))
+    _apply_and_advance(_request_sid(), action, amount)</code></pre>
+<p>קטן בכוונה — הוא רק מגן, ממיר טיפוסים, ומעביר הלאה. כל ה-lifecycle של
+<b>emit → validate → mutate → broadcast</b> חי ב-<code>_apply_and_advance</code>, שהוא כל הנושא
+של ימים 3–4. להיום רק דע: <em>זו נקודת הכניסה למהלך של אדם.</em></p>
+
+
+<h2 id="restart">8. <code>on_restart_game</code> ו-<code>on_pause_game</code></h2>
+<span class="tag">client emits: "restart_game" / "pause_game" (בקרות ה-host)</span>
+<pre><code>@socketio.on('restart_game')
+def on_restart_game():
+    if not current_game and not game_active: return
+    socketio.emit('game_finished', {'winner': None, 'restarted': True})
+    for info in session_players.values():
+        info['chips'] = 1000                 # כולם חוזרים ל-buy-in
+    _db_reset_chips('poker', 1000)            # no-op
+    _end_game_session()
+
+@socketio.on('pause_game')
+def on_pause_game():
+    if not current_game and not game_active: return
+    socketio.emit('game_paused', {})
+    _end_game_session()</code></pre>
+<p>אותו teardown, טיפול שונה בצ'יפים. <b>Restart</b> מאפס צ'יפים ל-1000; <b>pause</b> שומר אותם.
+שניהם קוראים ל:</p>
+<pre><code>def _end_game_session():
+    global current_game, session_to_player, game_active, join_queue
+    game_active = False
+    current_game = None
+    session_to_player = {}
+    join_queue = []
+    for info in session_players.values():
+        info['state'] = 'lobby'          # כולם חוזרים ללובי
+    _broadcast_queue(); _broadcast_lobby()</code></pre>
+<p>אחרי זה העולם נראה כמו שנראה לפני <code>start_game</code>, חוץ מזה שהצ'יפים עשויים להיות שונים
+ואנשים אולי התנתקו.</p>
+
+
+<h2 id="next">9. <code>on_next_hand</code></h2>
+<span class="tag">client emits: "next_hand" (ה-host לוחץ "Next hand" אחרי showdown)</span>
+<pre><code>@socketio.on('next_hand')
+def on_next_hand():
+    if not current_game:
+        return
+    _flush_queue()                              # 1: מושיבים כל מי שהצטרף במהלך היד הקודמת
+    if _finish_game_if_too_few_connected():      # 2: יוצאים אם נשארו מעט מדי שחקנים
+        return
+    current_game.next_hand()                     # 3: מזיזים את ה-dealer button, מערבבים מחדש, מחלקים
+    _sync_all_game_player_chips()                # 4: מעתיקים ספירת צ'יפים מה-engine ל-session_players
+    _broadcast_game_state()                      # 5: מצב ציבורי
+    _send_private_hands()                        # 6: קלפי hole חדשים
+    _process_automatic_turns()                   # 7: בוט / offline משחק אוטומטית אם ראשון לפעול</code></pre>
+<ol class="steps">
+  <li><code>_flush_queue()</code> עובר על <code>join_queue</code>, ולכל ממתין שעדיין מחובר ויש לו
+      מקום בשולחן, בונה <code>HumanPlayer</code>, מוסיף אותו ל-<code>current_game.players</code>,
+      ושולח לו <code>game_starting</code>. כל מי שאי אפשר להושיב (שולחן מלא, או עכשיו offline) נשאר
+      ב-queue.</li>
+  <li>אם שחקנים פשטו רגל או נפלו ונשארו פחות מ-2, מסיימים את המשחק.</li>
+  <li>ה-engine מחלק את היד הבאה.</li>
+  <li><code>_sync_all_game_player_chips()</code> — ה-engine הוא ה-source of truth לצ'יפים במהלך
+      יד; זה דוחף אותם חזרה ל-<code>session_players</code> כדי שה-snapshots של הלובי / ה-queue
+      יישארו מדויקים.</li>
+  <li>–7. אותה שלישיית broadcast כמו ב-<code>start_game</code>.</li>
+</ol>
+
+
+<h2>בדיקה עצמית לפני ימים 3–4</h2>
+<p>כסה את התשובות ואמור כל אחת בקול:</p>
+<ol class="steps">
+  <li>Client שולח <code>join_game</code> עבור session_id שכבר קיים ב-<code>session_players</code>
+      באמצע יד ← <span class="kbd">נתיב reconnect: קישור מחדש של ה-sid, replay של המצב כולל קלפי
+      hole, broadcast מחדש. בלי מושב חדש.</span></li>
+  <li>Client שולח <code>disconnect</code> ונשאר רק אדם 1 ביד ←
+      <span class="kbd">_finish_game_if_too_few_connected() שולח game_finished, _end_game_session()
+      מאפס ללובי.</span></li>
+  <li>למה <code>on_player_action</code> הוא רק 6 שורות? <span class="kbd">זו רק נקודת הכניסה של ה-socket;
+      העבודה האמיתית היא _apply_and_advance (ימים 3–4).</span></li>
+  <li>מה <code>state</code> ('lobby' / 'queued' / 'game') שולט עליו? <span class="kbd">מי נחשב
+      כמושב, מי הופך ל-Player ב-start_game, את מי _flush_queue מושיב.</span></li>
+  <li>ההבדל בין <code>sid</code> ל-<code>session_id</code>? <span class="kbd">sid = per-connection,
+      משתנה ברענון; session_id = per-browser, קבוע. הדאטה נשמר לפי session_id.</span></li>
+</ol>
+
+<div class="flow">emit → this handler runs → mutate the shared dicts → socketio.emit(...) pushes new state to the screens</div>
+
+</div>
+<script>
+(function () {
+  var KW = /^(?:def|class|return|if|elif|else|for|while|in|not|and|or|is|None|True|False|import|from|as|with|try|except|finally|global|nonlocal|lambda|continue|break|pass|yield|del|assert|await|async)$/;
+  var BUILTIN = /^(?:self|socketio|emit|print|int|str|len|min|max|list|set|dict|bool|float|isinstance|getattr|hasattr|setattr|next|range|enumerate|any|all|super|Exception)$/;
+  function esc(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+  var re = /(#[^\n]*)|('(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*")|(@[A-Za-z_][\w.]*)|(\b\d+(?:\.\d+)?\b)|([A-Za-z_]\w*)/g;
+  document.querySelectorAll("pre > code").forEach(function (code) {
+    var src = code.textContent, out = "", last = 0, m;
+    while ((m = re.exec(src))) {
+      out += esc(src.slice(last, m.index));
+      if (m[1]) out += '<span class="tok-c">' + esc(m[1]) + "</span>";
+      else if (m[2]) out += '<span class="tok-s">' + esc(m[2]) + "</span>";
+      else if (m[3]) out += '<span class="tok-d">' + esc(m[3]) + "</span>";
+      else if (m[4]) out += '<span class="tok-n">' + esc(m[4]) + "</span>";
+      else {
+        var w = m[5];
+        if (KW.test(w)) out += '<span class="tok-k">' + w + "</span>";
+        else if (BUILTIN.test(w)) out += '<span class="tok-b">' + w + "</span>";
+        else if (/^\s*\(/.test(src.slice(m.index + w.length))) out += '<span class="tok-f">' + w + "</span>";
+        else out += w;
+      }
+      last = re.lastIndex;
+    }
+    out += esc(src.slice(last));
+    code.innerHTML = out;
+  });
+})();
+</script>
+</body>
+</html>

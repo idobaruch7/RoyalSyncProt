@@ -255,11 +255,13 @@
 
       .felt .table-list .row {
         border-top: none;
-        flex: 1 1 220px;
-        max-width: 260px;
+        flex: 1 1 280px;
+        width: 280px;
+        max-width: 280px;
         background: rgba(0, 0, 0, 0.28);
         border-radius: 8px;
         padding: 8px 10px;
+        box-sizing: border-box;
       }
 
       .felt .table-list .row.current-turn {
@@ -286,21 +288,21 @@
         display: flex;
         flex-wrap: wrap;
         gap: 8px;
-        min-height: 69px;
+        min-height: 165px;
         align-items: center;
       }
 
       .mini-card {
-        width: 51px;
-        height: 69px;
-        border-radius: 8px;
+        width: 123px;
+        height: 165px;
+        border-radius: 12px;
         border: 1px solid #e2e8f0;
         background: #f8fafc;
         color: #0f172a;
         display: flex;
         flex-direction: column;
         justify-content: space-between;
-        padding: 5px;
+        padding: 12px;
         font-weight: 700;
         box-shadow: 0 2px 8px rgba(2, 6, 23, 0.35);
       }
@@ -309,14 +311,14 @@
         color: #b91c1c;
       }
       .mini-card .rank {
-        font-size: 2.04rem;
+        font-size: 4.89rem;
         line-height: 1;
       }
       .mini-card .suit {
-        font-size: 2.3rem;
+        font-size: 5.52rem;
         line-height: 1;
         align-self: center;
-        transform: translateY(-5px);
+        transform: translateY(-12px);
       }
 
       .cards-empty {
@@ -346,20 +348,36 @@
         opacity: 0.7;
       }
 
+      .player-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 8px;
+      }
+
       .player-main {
         display: flex;
         flex-direction: column;
         gap: 6px;
+        min-width: 0;
+      }
+
+      .player-name {
+        overflow-wrap: break-word;
       }
 
       .player-hand {
         display: flex;
         gap: 6px;
+        justify-content: center;
+        margin-top: 8px;
       }
 
       .table-list .row {
-        align-items: flex-start;
-        gap: 8px;
+        flex-direction: column;
+        justify-content: flex-start;
+        align-items: stretch;
+        gap: 0;
       }
 
       .player-right {
@@ -368,6 +386,18 @@
         align-items: flex-end;
         gap: 6px;
         font-weight: 700;
+        flex-shrink: 0;
+      }
+
+      .mini-card.back {
+        background: repeating-linear-gradient(
+          135deg,
+          #1e3a8a,
+          #1e3a8a 8px,
+          #1e40af 8px,
+          #1e40af 16px
+        );
+        border: 1px solid #93c5fd;
       }
 
       .bet-pill {
@@ -613,6 +643,10 @@
         return `<div class="mini-card${isRed ? " red" : ""}"><span class="rank">${esc(card.rank)}</span><span class="suit">${esc(card.suit)}</span></div>`;
       }
 
+      function cardBackMarkup() {
+        return `<div class="mini-card back"></div>`;
+      }
+
       function renderCards(el, cards, emptyText) {
         if (!cards.length) {
           el.innerHTML = `<span class="cards-empty">${esc(emptyText)}</span>`;
@@ -712,6 +746,14 @@
       });
 
       let winnerNames = new Set();
+      let currentPhase = "waiting";
+      const HAND_IN_PROGRESS_PHASES = new Set([
+        "pre_flop",
+        "flop",
+        "turn",
+        "river",
+        "showdown",
+      ]);
 
       function renderTable(players) {
         tableListEl.innerHTML = (players || [])
@@ -726,10 +768,16 @@
             if (p.is_connected === false) tags.push("OFFLINE");
             const isWinner = winnerNames.has(p.nickname);
             if (isWinner) tags.push("WINNER");
-            const handHtml =
-              p.hand && p.hand.length
-                ? `<div class="player-hand">${p.hand.map((card) => cardMarkup(card)).join("")}</div>`
-                : "";
+
+            let handHtml = "";
+            if (p.folded) {
+              handHtml = "";
+            } else if (p.hand && p.hand.length) {
+              handHtml = `<div class="player-hand">${p.hand.map((card) => cardMarkup(card)).join("")}</div>`;
+            } else if (HAND_IN_PROGRESS_PHASES.has(currentPhase)) {
+              handHtml = `<div class="player-hand">${cardBackMarkup()}${cardBackMarkup()}</div>`;
+            }
+
             const betPill =
               p.round_bet > 0
                 ? `<span class="bet-pill">${fmt(p.round_bet)}</span>`
@@ -742,13 +790,14 @@
             ]
               .filter(Boolean)
               .join(" ");
-            return `<div class="${rowClass}"><div class="player-main">${esc(p.nickname)} (${tags.join(" ") || "-"})${handHtml}</div><div class="player-right"><span class="chips-val">${fmt(p.chips)} chips</span>${betPill}</div></div>`;
+            return `<div class="${rowClass}"><div class="player-top"><div class="player-main"><span class="player-name">${esc(p.nickname)} (${tags.join(" ") || "-"})</span></div><div class="player-right"><span class="chips-val">${fmt(p.chips)} chips</span>${betPill}</div></div>${handHtml}</div>`;
           })
           .join("");
       }
 
       socket.on("game_starting", () => {
         gameStarted = true;
+        currentPhase = "pre_flop";
         mPhase.textContent = phaseLabel("pre_flop");
         winnerNames = new Set();
         updateButtons();
@@ -756,6 +805,7 @@
 
       socket.on("game_state", (state) => {
         if (state.state === "pre_flop") winnerNames = new Set();
+        currentPhase = state.state;
         mPhase.textContent = phaseLabel(state.state);
         mPot.textContent = fmt(state.pot);
         mBet.textContent = fmt(state.current_bet);
@@ -781,6 +831,7 @@
 
       socket.on("game_finished", (data) => {
         gameStarted = false;
+        currentPhase = "finished";
         mPhase.textContent = phaseLabel("finished");
         mTurn.textContent = data.winner
           ? `winner: ${data.winner}`
@@ -791,6 +842,7 @@
 
       socket.on("game_paused", () => {
         gameStarted = false;
+        currentPhase = "waiting";
         winnerNames = new Set();
         mPhase.textContent = phaseLabel("waiting");
         mPot.textContent = fmt(0);
